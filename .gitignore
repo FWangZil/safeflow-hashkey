@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+.next/
+out/
+dist/
+build/
+
+# Foundry
+contracts/cache/
+contracts/out/
+contracts/broadcast/
+
+# Env
+.env
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# DB
+*.sqlite
+*.sqlite3
+data/
+
+# Misc
+*.tsbuildinfo
+.history/
