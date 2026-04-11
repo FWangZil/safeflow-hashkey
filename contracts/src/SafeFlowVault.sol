@@ -25,6 +25,7 @@ contract SafeFlowVault is ISafeFlowEvents {
     error TransferFailed();
     error ZeroAmount();
     error ZeroAddress();
+    error WalletNotFound();
 
     // ─── Structs ─────────────────────────────────────────────
 
@@ -76,7 +77,8 @@ contract SafeFlowVault is ISafeFlowEvents {
     }
 
     function deposit(uint256 walletId, address token, uint256 amount) external {
-        if (!wallets[walletId].exists) revert InvalidSessionCap();
+        if (!wallets[walletId].exists) revert WalletNotFound();
+        if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
 
         if (!IERC20(token).transferFrom(msg.sender, address(this), amount)) revert TransferFailed();
