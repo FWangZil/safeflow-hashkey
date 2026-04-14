@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
-import { BarChart3, Loader2, Wallet, RefreshCw, ExternalLink, TrendingUp, Coins } from 'lucide-react';
+import { BarChart3, Loader2, Wallet, RefreshCw, Coins } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { formatTvl } from '@/lib/earn-api';
+import { useSafeFlowResources } from '@/lib/safeflow-resources';
+
+interface PortfolioProps {
+  onOpenExplore?: () => void;
+  onOpenSettings?: () => void;
+}
 
 interface PortfolioPosition {
   chainId: number;
@@ -31,15 +36,17 @@ const CHAIN_NAMES: Record<number, string> = {
   43114: 'Avalanche',
 };
 
-export default function Portfolio() {
+export default function Portfolio({ onOpenExplore, onOpenSettings }: PortfolioProps) {
   const { t } = useTranslation();
   const { address, isConnected } = useAccount();
+  const { currentWallets, currentAgentCaps } = useSafeFlowResources();
   const [positions, setPositions] = useState<PortfolioPosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalUsd, setTotalUsd] = useState(0);
+  const hasReadyResources = currentWallets.length > 0 && currentAgentCaps.length > 0;
 
-  const fetchPositions = async () => {
+  const fetchPositions = useCallback(async () => {
     if (!address) return;
     setLoading(true);
     setError(null);
@@ -63,13 +70,13 @@ export default function Portfolio() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [address]);
 
   useEffect(() => {
     if (isConnected && address) {
       fetchPositions();
     }
-  }, [address, isConnected]);
+  }, [address, fetchPositions, isConnected]);
 
   if (!isConnected) {
     return (
@@ -123,10 +130,28 @@ export default function Portfolio() {
       {!loading && positions.length === 0 && !error && (
         <div className="p-10 border border-border rounded-xl bg-card/60 text-center glow-border">
           <BarChart3 className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">No yield positions found for this wallet.</p>
+          <p className="text-sm text-muted-foreground">{t('portfolio.emptyTitle')}</p>
           <p className="text-[11px] text-muted-foreground/60 mt-1">
-            Deposit into a vault to see your positions here.
+            {hasReadyResources ? t('portfolio.emptyReadyDescription') : t('portfolio.emptySetupDescription')}
           </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+            {onOpenExplore && (
+              <button
+                onClick={onOpenExplore}
+                className="rounded-xl border border-primary/20 bg-primary/10 px-3.5 py-2 text-xs font-semibold text-primary transition hover:border-primary/30 hover:bg-primary/15"
+              >
+                {t('portfolio.openExploreCta')}
+              </button>
+            )}
+            {onOpenSettings && !hasReadyResources && (
+              <button
+                onClick={onOpenSettings}
+                className="rounded-xl border border-border bg-secondary/70 px-3.5 py-2 text-xs font-semibold text-foreground transition hover:bg-secondary"
+              >
+                {t('portfolio.openSettingsCta')}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

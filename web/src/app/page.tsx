@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount } from 'wagmi';
 import { AlertTriangle, BarChart3, Globe2, MessageSquare, Settings, Shield, TrendingUp } from 'lucide-react';
 import VaultExplorer from '@/components/VaultExplorer';
 import ChatAgent from '@/components/ChatAgent';
@@ -12,6 +13,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import LangToggle from '@/components/LangToggle';
 import { useTranslation } from '@/i18n';
 import { getAppRuntimeMode } from '@/lib/chains';
+import { useSafeFlowResources } from '@/lib/safeflow-resources';
 import type { EarnVault } from '@/types';
 
 type Tab = 'chat' | 'explore' | 'portfolio' | 'settings';
@@ -20,7 +22,12 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>('chat');
   const [selectedVault, setSelectedVault] = useState<EarnVault | null>(null);
   const { t } = useTranslation();
+  const { isConnected } = useAccount();
+  const { currentWallets, currentAgentCaps } = useSafeFlowResources();
   const runtimeMode = getAppRuntimeMode();
+  const needsWalletSetup = isConnected && currentWallets.length === 0;
+  const needsCapSetup = isConnected && currentWallets.length > 0 && currentAgentCaps.length === 0;
+  const showSetupBanner = activeTab !== 'settings' && (needsWalletSetup || needsCapSetup);
 
   const handleSelectVault = (vault: EarnVault) => {
     setSelectedVault(vault);
@@ -155,6 +162,30 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-5 relative z-1">
+        {showSetupBanner && (
+          <div className="mb-5 rounded-[1.75rem] border border-border bg-card/70 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] glow-border">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+                  {t('app.setupEyebrow')}
+                </div>
+                <h2 className="text-lg font-semibold tracking-tight">
+                  {needsWalletSetup ? t('app.setupWalletTitle') : t('app.setupCapTitle')}
+                </h2>
+                <p className="max-w-[70ch] text-sm leading-relaxed text-muted-foreground">
+                  {needsWalletSetup ? t('app.setupWalletDescription') : t('app.setupCapDescription')}
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 active:translate-y-[1px]"
+              >
+                {t('app.openSettingsCta')}
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'chat' && (
           <div className="max-w-4xl mx-auto w-full animate-fade-in-up">
             <ChatAgent onSelectVault={handleSelectVault} />
@@ -181,7 +212,7 @@ export default function Home() {
                 {t('portfolio.subtitle')}
               </p>
             </div>
-            <Portfolio />
+            <Portfolio onOpenExplore={() => setActiveTab('explore')} onOpenSettings={() => setActiveTab('settings')} />
           </div>
         )}
 
@@ -214,7 +245,11 @@ export default function Home() {
 
       {/* Deposit Modal */}
       {selectedVault && (
-        <DepositModal vault={selectedVault} onClose={() => setSelectedVault(null)} />
+        <DepositModal
+          vault={selectedVault}
+          onClose={() => setSelectedVault(null)}
+          onOpenSettings={() => setActiveTab('settings')}
+        />
       )}
     </div>
   );

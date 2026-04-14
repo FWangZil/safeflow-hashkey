@@ -287,6 +287,8 @@ It centralizes:
 
 `web/src/components/DepositModal.tsx` now consumes this hook instead of owning the wallet network mutation logic directly.
 
+`web/src/components/SessionManager.tsx` also uses the same hook for wallet-creation and SessionCap management flows, so Settings now follows the same local fork chain-switch behavior as the deposit modal.
+
 ---
 
 ## Current Decision Record

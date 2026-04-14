@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from 'next-themes';
 import { I18nProvider } from '@/i18n';
 import { LOCAL_FORK_CONFIG_ERROR, walletChains } from '@/lib/chains';
+import { SafeFlowResourceProvider } from '@/lib/safeflow-resources';
 import '@rainbow-me/rainbowkit/styles.css';
 
 if (LOCAL_FORK_CONFIG_ERROR) {
@@ -39,9 +40,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <I18nProvider>
-            <ThemedRainbowKit>
-              {children}
-            </ThemedRainbowKit>
+            <SafeFlowResourceProvider>
+              <ThemedRainbowKit>
+                {children}
+              </ThemedRainbowKit>
+            </SafeFlowResourceProvider>
           </I18nProvider>
         </ThemeProvider>
       </QueryClientProvider>

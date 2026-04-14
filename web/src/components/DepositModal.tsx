@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { X, Loader2, CheckCircle, ExternalLink, AlertTriangle, Coins, Shield } from 'lucide-react';
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from 'wagmi';
 import { keccak256, parseUnits, stringToHex } from 'viem';
@@ -10,20 +10,56 @@ import { getChainExplorerTxUrl, getExecutionChainDisplayName, getExecutionChainI
 import { ERC20_ABI, getSafeFlowAddress, SAFEFLOW_VAULT_ABI } from '@/lib/contracts';
 import { useSwitchOrAddChain } from '@/lib/useSwitchOrAddChain';
 import { useTranslation } from '@/i18n';
+import { useSafeFlowResources } from '@/lib/safeflow-resources';
 
 interface DepositModalProps {
   vault: EarnVault;
   onClose: () => void;
+  onOpenSettings?: () => void;
 }
 
 type DepositStep = 'input' | 'quoting' | 'confirm' | 'executing' | 'success' | 'error';
 
-export default function DepositModal({ vault, onClose }: DepositModalProps) {
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+function isCapExpired(expiresAt: bigint | undefined) {
+  if (!expiresAt) return false;
+  return Number(expiresAt) * 1000 < Date.now();
+}
+
+function isEmptyCapData(cap?: {
+  walletId: bigint;
+  agent: string;
+  maxSpendPerInterval: bigint;
+  maxSpendTotal: bigint;
+  intervalSeconds: bigint;
+  expiresAt: bigint;
+  active: boolean;
+}) {
+  if (!cap) return false;
+  return (
+    cap.walletId === 0n &&
+    cap.agent.toLowerCase() === ZERO_ADDRESS &&
+    cap.maxSpendPerInterval === 0n &&
+    cap.maxSpendTotal === 0n &&
+    cap.intervalSeconds === 0n &&
+    cap.expiresAt === 0n &&
+    !cap.active
+  );
+}
+
+function getCapStatus(cap: { active?: boolean; expiresAt?: string | bigint }) {
+  if (cap.active === false) return 'inactive';
+  if (isCapExpired(typeof cap.expiresAt === 'string' ? BigInt(cap.expiresAt) : cap.expiresAt)) return 'expired';
+  return 'ready';
+}
+
+export default function DepositModal({ vault, onClose, onOpenSettings }: DepositModalProps) {
   const { t } = useTranslation();
   const { address, isConnected, chainId } = useAccount();
   const [amount, setAmount] = useState('');
-  const [walletId, setWalletId] = useState('0');
-  const [capId, setCapId] = useState('0');
+  const [walletId, setWalletId] = useState('');
+  const [capId, setCapId] = useState('');
   const [step, setStep] = useState<DepositStep>('input');
   const [quote, setQuote] = useState<ComposerQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +67,7 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
 
   const { writeContractAsync } = useWriteContract();
+  const { currentAgentCaps, currentWallets, currentCaps, importCap, lastUsed, rememberLastUsed } = useSafeFlowResources();
 
   const underlyingToken = vault.underlyingTokens?.[0];
   const tokenSymbol = underlyingToken?.symbol || '?';
@@ -49,7 +86,7 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
   })();
   const amountWei = amount && parseFloat(amount) > 0 ? parseUnits(amount, tokenDecimals) : BigInt(0);
 
-  const { data: capData } = useReadContract({
+  const { data: capData, isLoading: isCapLoading } = useReadContract({
     address: safeFlowAddress ?? undefined,
     abi: SAFEFLOW_VAULT_ABI,
     functionName: 'getSessionCap',
@@ -73,6 +110,78 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
     query: { enabled: Boolean(address && safeFlowAddress && underlyingToken?.address) },
   });
 
+  const suggestedResources = useMemo(() => {
+    const pairedResources = currentAgentCaps
+      .map(cap => ({
+        cap,
+        wallet: currentWallets.find(wallet => wallet.walletId === cap.walletId),
+      }))
+      .filter(resource => Boolean(resource.wallet));
+
+    return pairedResources.sort((left, right) => {
+      if (lastUsed?.capId === left.cap.capId) return -1;
+      if (lastUsed?.capId === right.cap.capId) return 1;
+      return right.cap.createdAt - left.cap.createdAt;
+    });
+  }, [currentAgentCaps, currentWallets, lastUsed]);
+
+  const parsedCapData = capData as {
+    walletId: bigint;
+    agent: string;
+    maxSpendPerInterval: bigint;
+    maxSpendTotal: bigint;
+    intervalSeconds: bigint;
+    expiresAt: bigint;
+    totalSpent: bigint;
+    active: boolean;
+  } | undefined;
+
+  const capNotFound = Boolean(capId && parsedCapData && isEmptyCapData(parsedCapData));
+  const knownCap = currentCaps.find(resource => resource.capId === capId);
+
+  useEffect(() => {
+    if (walletId || capId) return;
+
+    if (lastUsed) {
+      setWalletId(lastUsed.walletId);
+      setCapId(lastUsed.capId);
+      return;
+    }
+
+    if (suggestedResources.length === 1) {
+      setWalletId(suggestedResources[0].wallet.walletId);
+      setCapId(suggestedResources[0].cap.capId);
+    }
+  }, [capId, lastUsed, suggestedResources, walletId]);
+
+  useEffect(() => {
+    if (!parsedCapData || capNotFound) return;
+    const nextWalletId = String(parsedCapData.walletId);
+    if (walletId !== nextWalletId) {
+      setWalletId(nextWalletId);
+    }
+  }, [capNotFound, parsedCapData, walletId]);
+
+  const capValidation = useMemo(() => {
+    if (!capId) return null;
+    if (isCapLoading) {
+      return { tone: 'info' as const, message: t('vaultModal.capLoading') };
+    }
+    if (!parsedCapData || capNotFound) {
+      return { tone: 'error' as const, message: t('vaultModal.capNotFound') };
+    }
+    if (!parsedCapData.active) {
+      return { tone: 'error' as const, message: t('vaultModal.capInactive') };
+    }
+    if (isCapExpired(parsedCapData.expiresAt)) {
+      return { tone: 'error' as const, message: t('vaultModal.capExpired') };
+    }
+    if (address && parsedCapData.agent.toLowerCase() !== address.toLowerCase()) {
+      return { tone: 'error' as const, message: t('vaultModal.capWrongAgent') };
+    }
+    return { tone: 'success' as const, message: t('vaultModal.capReady') };
+  }, [address, capId, capNotFound, isCapLoading, parsedCapData, t]);
+
   const fetchQuote = useCallback(async () => {
     if (!address || !amount || parseFloat(amount) <= 0 || !safeFlowAddress || !underlyingToken) return;
 
@@ -93,6 +202,9 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
 
       if (!cap.active) {
         throw new Error('SessionCap is not active.');
+      }
+      if (isCapExpired(cap.expiresAt)) {
+        throw new Error('SessionCap has expired. Create or import a fresh cap before depositing.');
       }
       if (cap.walletId !== BigInt(walletId)) {
         throw new Error('Wallet ID does not match the selected SessionCap.');
@@ -149,6 +261,9 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
 
       if (!cap?.active) {
         throw new Error('SessionCap is not active.');
+      }
+      if (isCapExpired((capData as { expiresAt: bigint } | undefined)?.expiresAt)) {
+        throw new Error('SessionCap has expired. Create or import a fresh cap before depositing.');
       }
       if (cap.walletId !== BigInt(walletId)) {
         throw new Error('Wallet ID does not match the selected SessionCap.');
@@ -240,6 +355,22 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
       await publicClient.waitForTransactionReceipt({ hash: execHash });
       setTxHash(execHash);
 
+      if (parsedCapData && !knownCap) {
+        importCap({
+          capId,
+          walletId,
+          agentAddress: parsedCapData.agent as `0x${string}`,
+          chainId: executionChainId,
+          maxSpendPerInterval: String(parsedCapData.maxSpendPerInterval),
+          maxSpendTotal: String(parsedCapData.maxSpendTotal),
+          intervalSeconds: String(parsedCapData.intervalSeconds),
+          expiresAt: String(parsedCapData.expiresAt),
+          totalSpent: String(parsedCapData.totalSpent),
+          active: parsedCapData.active,
+        });
+      }
+      rememberLastUsed({ walletId, capId });
+
       if (auditData?.entry?.id) {
         await fetch('/api/audit', {
           method: 'PATCH',
@@ -260,7 +391,7 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
       setProgressLabel('');
       setStep('error');
     }
-  }, [address, amount, amountWei, capData, capId, chainId, executionChainId, executionChainName, publicClient, quote, remainingAllowance, safeFlowAddress, tokenAllowance, tokenSymbol, underlyingToken, vault, walletId, writeContractAsync]);
+  }, [address, amount, amountWei, capData, capId, chainId, executionChainId, executionChainName, importCap, knownCap, parsedCapData, publicClient, quote, rememberLastUsed, remainingAllowance, safeFlowAddress, tokenAllowance, tokenSymbol, underlyingToken, vault, walletId, writeContractAsync]);
 
   const explorerUrl = getChainExplorerTxUrl(executionChainId, txHash);
 
@@ -381,20 +512,80 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
                 {error}
               </div>
             )}
+
+            {suggestedResources.length > 0 ? (
+              <div className="rounded-2xl border border-border bg-secondary/30 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">{t('vaultModal.savedResourcesTitle')}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">{t('vaultModal.savedResourcesSubtitle')}</div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    {t('vaultModal.savedResourcesCount', { count: suggestedResources.length })}
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {suggestedResources.slice(0, 3).map(({ cap, wallet }) => {
+                    const selected = capId === cap.capId;
+                    const status = getCapStatus(cap);
+
+                    return (
+                      <button
+                        key={cap.capId}
+                        onClick={() => {
+                          setCapId(cap.capId);
+                          setWalletId(wallet.walletId);
+                          setError(null);
+                        }}
+                        className={`w-full rounded-2xl border p-3 text-left transition ${selected ? 'border-primary/30 bg-primary/10 shadow-lg shadow-primary/5' : 'border-border bg-card/60 hover:border-primary/20 hover:bg-card'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold font-data">{t('vaultModal.capPairLabel', { capId: cap.capId, walletId: wallet.walletId })}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${status === 'ready' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-destructive/15 text-destructive'}`}>
+                                {status === 'ready' ? t('vaultModal.capReadyBadge') : status === 'expired' ? t('vaultModal.capExpiredBadge') : t('vaultModal.capInactiveBadge')}
+                              </span>
+                              {lastUsed?.capId === cap.capId && (
+                                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                  {t('vaultModal.lastUsedBadge')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {t('vaultModal.capAgentPair', { agent: cap.agentAddress.slice(0, 6) + '...' + cap.agentAddress.slice(-4), expiry: cap.expiresAt ? new Date(Number(cap.expiresAt) * 1000).toLocaleString() : '—' })}
+                            </div>
+                          </div>
+                          <span className="text-xs font-semibold text-primary">{selected ? t('vaultModal.selectedResource') : t('vaultModal.useResource')}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-warning/20 bg-warning/10 p-3.5 text-sm">
+                <div className="font-semibold">{t('vaultModal.noSavedResourcesTitle')}</div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {currentWallets.length > 0 ? t('vaultModal.noEligibleCaps') : t('vaultModal.noSavedResourcesDescription')}
+                </p>
+                {onOpenSettings && (
+                  <button
+                    onClick={() => {
+                      onOpenSettings();
+                      onClose();
+                    }}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition hover:border-primary/30 hover:bg-primary/15"
+                  >
+                    {t('vaultModal.openResourceCenter')}
+                  </button>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium">
-                SafeFlow Wallet ID
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={walletId}
-                onChange={e => setWalletId(e.target.value)}
-                className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40 mb-3"
-              />
-
-              <label className="block text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium">
-                SessionCap ID
+                {t('vaultModal.capIdLabel')}
               </label>
               <input
                 type="number"
@@ -403,36 +594,78 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
                 onChange={e => setCapId(e.target.value)}
                 className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40 mb-3"
               />
+              <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground/70">
+                {t('vaultModal.capIdHint')}
+              </p>
 
-              {capData && (
-                <div className="p-3 mb-3 bg-secondary/50 rounded-xl space-y-1 text-[11px] font-data">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Cap agent</span>
-                    <span className={(capData as { agent: string }).agent.toLowerCase() === address?.toLowerCase() ? 'text-success' : 'text-destructive'}>
-                      {(capData as { agent: string }).agent.slice(0, 6)}...{(capData as { agent: string }).agent.slice(-4)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Cap wallet</span>
-                    <span>{String((capData as { walletId: bigint }).walletId)}</span>
-                  </div>
-                  {remainingAllowance && (
-                    <>
+              <label className="block text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium">
+                {t('vaultModal.walletIdLabel')}
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={walletId}
+                onChange={e => setWalletId(e.target.value)}
+                className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40 mb-3"
+              />
+              <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground/70">
+                {t('vaultModal.walletIdHint')}
+              </p>
+
+              {capValidation && (
+                <div className={`mb-3 rounded-xl border p-3 text-[11px] ${capValidation.tone === 'success' ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200' : capValidation.tone === 'error' ? 'border-destructive/20 bg-destructive/10 text-destructive' : 'border-border bg-secondary/40 text-muted-foreground'}`}>
+                  <div className="font-semibold">{capValidation.message}</div>
+                  {parsedCapData && !capNotFound && (
+                    <div className="mt-2 space-y-1 font-data">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Interval remaining</span>
-                        <span>{String((remainingAllowance as [bigint, bigint])[0])}</span>
+                        <span className="text-muted-foreground">{t('vaultModal.capAgent')}</span>
+                        <span className={parsedCapData.agent.toLowerCase() === address?.toLowerCase() ? 'text-success' : ''}>
+                          {parsedCapData.agent.slice(0, 6)}...{parsedCapData.agent.slice(-4)}
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Total remaining</span>
-                        <span>{String((remainingAllowance as [bigint, bigint])[1])}</span>
+                        <span className="text-muted-foreground">{t('vaultModal.capWallet')}</span>
+                        <span>{String(parsedCapData.walletId)}</span>
                       </div>
-                    </>
+                      {remainingAllowance && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">{t('vaultModal.intervalRemaining')}</span>
+                            <span>{String((remainingAllowance as [bigint, bigint])[0])}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">{t('vaultModal.totalRemaining')}</span>
+                            <span>{String((remainingAllowance as [bigint, bigint])[1])}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {parsedCapData && !capNotFound && !knownCap && capValidation.tone === 'success' && (
+                    <button
+                      onClick={() => importCap({
+                        capId,
+                        walletId: String(parsedCapData.walletId),
+                        agentAddress: parsedCapData.agent as `0x${string}`,
+                        chainId: executionChainId,
+                        maxSpendPerInterval: String(parsedCapData.maxSpendPerInterval),
+                        maxSpendTotal: String(parsedCapData.maxSpendTotal),
+                        intervalSeconds: String(parsedCapData.intervalSeconds),
+                        expiresAt: String(parsedCapData.expiresAt),
+                        totalSpent: String(parsedCapData.totalSpent),
+                        active: parsedCapData.active,
+                      })}
+                      className="mt-3 inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-[11px] font-semibold text-primary transition hover:border-primary/30 hover:bg-primary/15"
+                    >
+                      {t('vaultModal.saveCapForLater')}
+                    </button>
                   )}
                 </div>
               )}
 
               <label className="block text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium">
-                Amount ({tokenSymbol})
+                {t('vaultModal.amountLabel', { tokenSymbol })}
               </label>
               <input
                 type="number"
@@ -457,10 +690,10 @@ export default function DepositModal({ vault, onClose }: DepositModalProps) {
             </div>
             <button
               onClick={fetchQuote}
-              disabled={!amount || parseFloat(amount) <= 0 || !walletId || !capId}
+              disabled={!amount || parseFloat(amount) <= 0 || !walletId || !capId || capValidation?.tone === 'error'}
               className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20 disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              Build SafeFlow Quote
+              {t('vaultModal.buildQuote')}
             </button>
           </div>
         ) : step === 'quoting' ? (

@@ -77,6 +77,16 @@ export function getChainExplorerTxUrl(chainId: number, txHash?: `0x${string}`): 
   return `${explorerUrl.replace(/\/$/, '')}/tx/${txHash}`;
 }
 
+export function getChainExplorerAddressUrl(chainId: number, address?: `0x${string}`): string | null {
+  if (!address) return null;
+
+  const chain = getSupportedWalletChain(chainId);
+  const explorerUrl = chain?.blockExplorers?.default?.url;
+  if (!explorerUrl) return null;
+
+  return `${explorerUrl.replace(/\/$/, '')}/address/${address}`;
+}
+
 function getRpcHostLabel(rpcUrl: string): string {
   try {
     return new URL(rpcUrl).host;

@@ -205,7 +205,7 @@ Refactored the wallet network mutation path into a reusable frontend hook so the
 
 1. **Extracted switch/add chain logic** — Added `web/src/lib/useSwitchOrAddChain.ts` to own `useSwitchChain()` calls, `wallet_addEthereumChain` fallback behavior, and standardized error handling.
 
-2. **Simplified DepositModal** — `web/src/components/DepositModal.tsx` now consumes the shared hook instead of embedding wallet network mutation logic directly.
+2. **Simplified DepositModal and Settings flows** — `web/src/components/DepositModal.tsx` and `web/src/components/SessionManager.tsx` now consume the shared hook instead of embedding wallet network mutation logic directly.
 
 ### Validation
 
