@@ -577,6 +577,10 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
           amount: amountWei.toString(),
           reasoning: `SafeFlow wallet ${walletId} executes SessionCap ${capId} deposit into ${vault.name} on ${executionChainName}`,
           riskScore: 1,
+          chainId: executionChainId,
+          decimals: tokenDecimals,
+          walletId: String(walletId),
+          tokenAddress: underlyingToken.address,
         }),
       });
       const auditData = await auditRes.json().catch(() => null) as { entry?: { id: string } } | null;

@@ -18,6 +18,10 @@ interface AuditEntry {
   ipfsCid?: string;
   txHash?: string;
   status: 'pending' | 'executed' | 'failed';
+  chainId?: number;
+  decimals?: number;
+  walletId?: string;
+  tokenAddress?: string;
 }
 
 async function sha256Hex(text: string): Promise<string> {
@@ -72,6 +76,10 @@ export async function POST(req: NextRequest) {
       riskScore: body.riskScore ?? 0,
       evidenceHash,
       status: 'pending',
+      ...(body.chainId !== undefined && { chainId: Number(body.chainId) }),
+      ...(body.decimals !== undefined && { decimals: Number(body.decimals) }),
+      ...(body.walletId !== undefined && { walletId: String(body.walletId) }),
+      ...(body.tokenAddress !== undefined && { tokenAddress: String(body.tokenAddress) }),
     };
 
     const entries = await readEntries();
