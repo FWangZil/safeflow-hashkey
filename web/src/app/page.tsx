@@ -23,10 +23,10 @@ export default function Home() {
   const [selectedVault, setSelectedVault] = useState<EarnVault | null>(null);
   const { t } = useTranslation();
   const { isConnected } = useAccount();
-  const { currentWallets, currentAgentCaps, isHydrated } = useSafeFlowResources();
+  const { currentWallets, currentAgentCaps } = useSafeFlowResources();
   const runtimeMode = getAppRuntimeMode();
-  const needsWalletSetup = isConnected && isHydrated && currentWallets.length === 0;
-  const needsCapSetup = isConnected && isHydrated && currentWallets.length > 0 && currentAgentCaps.length === 0;
+  const needsWalletSetup = isConnected && currentWallets.length === 0;
+  const needsCapSetup = isConnected && currentWallets.length > 0 && currentAgentCaps.length === 0;
   const showSetupBanner = activeTab !== 'settings' && (needsWalletSetup || needsCapSetup);
 
   const handleSelectVault = (vault: EarnVault) => {
@@ -93,8 +93,8 @@ export default function Home() {
                 title={runtimeBadgeTitle}
                 className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] uppercase backdrop-blur-md ${
                   runtimeMode.isLocalFork
-                    ? 'border-amber-400/35 bg-amber-500/10 text-amber-200'
-                    : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+                    ? 'border-amber-500/50 bg-amber-50 text-amber-700 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-300'
+                    : 'border-emerald-500/40 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300'
                 }`}
               >
                 {runtimeMode.isLocalFork ? <AlertTriangle className="w-3.5 h-3.5" /> : <Globe2 className="w-3.5 h-3.5" />}
@@ -188,7 +188,7 @@ export default function Home() {
 
         {activeTab === 'chat' && (
           <div className="max-w-4xl mx-auto w-full animate-fade-in-up">
-            <ChatAgent onSelectVault={handleSelectVault} onOpenSettings={() => setActiveTab('settings')} />
+            <ChatAgent onSelectVault={handleSelectVault} />
           </div>
         )}
 
@@ -200,11 +200,7 @@ export default function Home() {
                 {t('explore.subtitle')}
               </p>
             </div>
-            <VaultExplorer
-              onSelectVault={handleSelectVault}
-              onOpenChat={() => setActiveTab('chat')}
-              onOpenSettings={() => setActiveTab('settings')}
-            />
+            <VaultExplorer onSelectVault={handleSelectVault} />
           </div>
         )}
 
@@ -239,7 +235,7 @@ export default function Home() {
           <span>{t('footer.left')}</span>
           <span
             title={runtimeBadgeTitle}
-            className={runtimeMode.isLocalFork ? 'text-amber-300/90' : 'text-emerald-300/90'}
+            className={runtimeMode.isLocalFork ? 'text-amber-600 dark:text-amber-300/90' : 'text-emerald-600 dark:text-emerald-300/90'}
           >
             {runtimeFooterLabel}
           </span>

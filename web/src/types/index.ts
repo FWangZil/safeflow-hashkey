@@ -94,6 +94,8 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   vaults?: EarnVault[];
+  retryText?: string;
+  retryUserMsgId?: string;
   action?: {
     type: 'deposit' | 'withdraw' | 'info';
     vault?: EarnVault;

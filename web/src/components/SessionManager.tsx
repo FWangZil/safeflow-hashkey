@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Key,
   Loader2,
+  RotateCcw,
   ShieldCheck,
   ShieldOff,
   Wallet,
@@ -88,7 +89,7 @@ function isEmptyCap(cap: SessionCapData | undefined) {
 export default function SessionManager() {
   const { t } = useTranslation();
   const { address, isConnected, chainId } = useAccount();
-  const { currentWallets, currentCaps, importCap, upsertCap, upsertWallet } = useSafeFlowResources();
+  const { currentWallets, currentCaps, importCap, upsertCap, upsertWallet, clearCurrentResources } = useSafeFlowResources();
   const contractChainId = LOCAL_FORK_ENABLED ? LOCAL_FORK_CHAIN_ID : chainId;
   const targetChain = LOCAL_FORK_ENABLED ? getSupportedWalletChain(LOCAL_FORK_CHAIN_ID) : undefined;
   const { isSwitchingChain, switchError, switchOrAddChain } = useSwitchOrAddChain(targetChain, LOCAL_FORK_CHAIN_ID);
@@ -97,6 +98,7 @@ export default function SessionManager() {
   const [lastCreatedWalletId, setLastCreatedWalletId] = useState('');
   const [lastCreatedCapId, setLastCreatedCapId] = useState('');
   const [savedQueryCapId, setSavedQueryCapId] = useState('');
+  const [resetFeedbackVisible, setResetFeedbackVisible] = useState(false);
 
   const [walletStep, setWalletStep] = useState<Step>('idle');
   const { writeContractAsync } = useWriteContract();
@@ -229,6 +231,13 @@ export default function SessionManager() {
     if (revokeTxSuccess && revokeStep === 'pending') setRevokeStep('success');
   }, [revokeStep, revokeTxSuccess]);
 
+  useEffect(() => {
+    if (!resetFeedbackVisible) return;
+
+    const timer = window.setTimeout(() => setResetFeedbackVisible(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [resetFeedbackVisible]);
+
   async function copyValue(label: string, value: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -329,6 +338,24 @@ export default function SessionManager() {
     setSavedQueryCapId(queryCapId);
   };
 
+  const handleResetLocalResources = () => {
+    clearCurrentResources();
+    setLastCreatedWalletId('');
+    setLastCreatedCapId('');
+    setSavedQueryCapId('');
+    setQueryCapId('');
+    setQueryEnabled(false);
+    setRevokeCapId('');
+    setWalletStep('idle');
+    setCapStep('idle');
+    setRevokeStep('idle');
+    setWalletTxHash(undefined);
+    setCapTxHash(undefined);
+    setRevokeTxHash(undefined);
+    setCapForm(current => ({ ...current, walletId: '0' }));
+    setResetFeedbackVisible(true);
+  };
+
   function renderTxReference(txHash?: `0x${string}`, explorerUrl?: string | null) {
     if (!txHash) return null;
 
@@ -359,11 +386,11 @@ export default function SessionManager() {
     if (!LOCAL_FORK_ENABLED) return null;
 
     return (
-      <div className="sm:col-span-2 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="sm:col-span-2 rounded-2xl border border-amber-400/30 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-400/20 p-4 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <div className="font-semibold text-amber-100">{t('settings.executionChainTitle')}</div>
-            <div className="text-xs text-amber-100/80">
+            <div className="font-semibold text-amber-800 dark:text-amber-100">{t('settings.executionChainTitle')}</div>
+            <div className="text-xs text-amber-700/90 dark:text-amber-100/80">
               {t('settings.executionChainDescription', { chainName: LOCAL_FORK_NAME, chainId: LOCAL_FORK_CHAIN_ID })}
             </div>
           </div>
@@ -371,12 +398,12 @@ export default function SessionManager() {
             <button
               onClick={switchOrAddChain}
               disabled={isSwitchingChain || !targetChain}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-700 dark:bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 dark:hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
             >
               {isSwitchingChain ? t('settings.waitingForWallet') : t('settings.switchChain', { chainName: LOCAL_FORK_NAME })}
             </button>
           ) : (
-            <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200">
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 dark:border-emerald-400/20 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-200">
               {t('settings.executionChainReady')}
             </div>
           )}
@@ -455,6 +482,8 @@ export default function SessionManager() {
   }
 
   function renderResourceLibrary() {
+    const hasSavedResources = currentWallets.length > 0 || currentCaps.length > 0;
+
     return (
       <div className="sm:col-span-2 rounded-[1.5rem] border border-border bg-card/60 p-5 glow-border">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -462,31 +491,53 @@ export default function SessionManager() {
             <h3 className="text-sm font-semibold tracking-tight">{t('settings.libraryTitle')}</h3>
             <p className="mt-1 max-w-[62ch] text-xs leading-relaxed text-muted-foreground">{t('settings.librarySubtitle')}</p>
           </div>
-          {(lastCreatedWalletId || lastCreatedCapId) && (
-            <div className="grid gap-2 text-xs font-data sm:grid-cols-2">
-              {lastCreatedWalletId && (
-                <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-emerald-200">
-                  <div className="text-[10px] uppercase tracking-[0.18em]">{t('settings.latestWallet')}</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span>{lastCreatedWalletId}</span>
-                    {renderCopyButton(`wallet-${lastCreatedWalletId}`, lastCreatedWalletId)}
+          <div className="flex flex-col gap-2 lg:items-end">
+            {hasSavedResources && (
+              <div className="flex flex-col items-start gap-2 lg:items-end">
+                <button
+                  onClick={handleResetLocalResources}
+                  className="inline-flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/10 px-3.5 py-2 text-xs font-semibold text-destructive transition hover:border-destructive/30 hover:bg-destructive/15 active:translate-y-[1px]"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  {t('settings.resetLocalResources')}
+                </button>
+                <p className="max-w-[30ch] text-right text-[11px] leading-relaxed text-muted-foreground">
+                  {t('settings.resetLocalResourcesHint')}
+                </p>
+              </div>
+            )}
+            {(lastCreatedWalletId || lastCreatedCapId) && (
+              <div className="grid gap-2 text-xs font-data sm:grid-cols-2">
+                {lastCreatedWalletId && (
+                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-emerald-200">
+                    <div className="text-[10px] uppercase tracking-[0.18em]">{t('settings.latestWallet')}</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span>{lastCreatedWalletId}</span>
+                      {renderCopyButton(`wallet-${lastCreatedWalletId}`, lastCreatedWalletId)}
+                    </div>
                   </div>
-                </div>
-              )}
-              {lastCreatedCapId && (
-                <div className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-primary">
-                  <div className="text-[10px] uppercase tracking-[0.18em]">{t('settings.latestCap')}</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span>{lastCreatedCapId}</span>
-                    {renderCopyButton(`cap-${lastCreatedCapId}`, lastCreatedCapId)}
+                )}
+                {lastCreatedCapId && (
+                  <div className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-primary">
+                    <div className="text-[10px] uppercase tracking-[0.18em]">{t('settings.latestCap')}</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span>{lastCreatedCapId}</span>
+                      {renderCopyButton(`cap-${lastCreatedCapId}`, lastCreatedCapId)}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {currentWallets.length === 0 && currentCaps.length === 0 ? (
+        {resetFeedbackVisible && (
+          <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200">
+            {t('settings.localResourcesReset')}
+          </div>
+        )}
+
+        {!hasSavedResources ? (
           <div className="mt-4 rounded-2xl border border-dashed border-border bg-secondary/20 px-4 py-5 text-sm text-muted-foreground">
             {t('settings.noResources')}
           </div>

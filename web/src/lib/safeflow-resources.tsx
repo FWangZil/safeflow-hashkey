@@ -68,6 +68,7 @@ type SafeFlowResourceContextValue = {
   upsertCap: (cap: Omit<SafeFlowCapResource, 'createdAt'> & { createdAt?: number }) => void;
   importCap: (cap: ImportCapParams) => void;
   rememberLastUsed: (selection: { walletId: string; capId: string; savedForAddress?: `0x${string}` }) => void;
+  clearCurrentResources: () => void;
 };
 
 const STORAGE_KEY = 'safeflow-resource-library:v1';
@@ -281,6 +282,22 @@ export function SafeFlowResourceProvider({ children }: { children: ReactNode }) 
     [normalizedAddress],
   );
 
+  const clearCurrentResources = useCallback(() => {
+    if (!normalizedAddress) return;
+
+    setState(current => {
+      const nextLastUsedByAddress = { ...current.lastUsedByAddress };
+      delete nextLastUsedByAddress[normalizedAddress];
+
+      return {
+        ...current,
+        wallets: current.wallets.filter(wallet => wallet.savedForAddress !== normalizedAddress),
+        caps: current.caps.filter(cap => cap.savedForAddress !== normalizedAddress),
+        lastUsedByAddress: nextLastUsedByAddress,
+      };
+    });
+  }, [normalizedAddress]);
+
   const currentWallets = useMemo(() => {
     if (!normalizedAddress) return [];
     return state.wallets.filter(wallet => wallet.savedForAddress === normalizedAddress);
@@ -311,8 +328,9 @@ export function SafeFlowResourceProvider({ children }: { children: ReactNode }) 
       upsertCap,
       importCap,
       rememberLastUsed,
+      clearCurrentResources,
     }),
-    [currentAgentCaps, currentCaps, currentWallets, importCap, isHydrated, lastUsed, state.caps, state.wallets, rememberLastUsed, upsertCap, upsertWallet],
+    [clearCurrentResources, currentAgentCaps, currentCaps, currentWallets, importCap, isHydrated, lastUsed, state.caps, state.wallets, rememberLastUsed, upsertCap, upsertWallet],
   );
 
   return <SafeFlowResourceContext.Provider value={value}>{children}</SafeFlowResourceContext.Provider>;

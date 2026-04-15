@@ -2,8 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
-import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield } from 'lucide-react';
-import type { ChatMessage, EarnVault } from '@/types';
+import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield } from 'lucide-react';import ReactMarkdown from 'react-markdown';import type { ChatMessage, EarnVault } from '@/types';
 import { formatApy, formatTvl } from '@/lib/earn-api';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
@@ -117,21 +116,21 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
               {t('chat.welcomeSubtitle')}
             </p>
 
-            {(showSetupCard || showReadyCard) && (
-              <div className={`w-full max-w-3xl rounded-[1.6rem] border p-4 mb-6 ${showSetupCard ? 'border-amber-400/20 bg-amber-500/10 shadow-[0_20px_60px_-36px_rgba(245,158,11,0.5)]' : 'border-emerald-400/20 bg-emerald-500/10 shadow-[0_20px_60px_-36px_rgba(16,185,129,0.45)]'}`}>
+            {showSetupCard && (
+              <div className="w-full max-w-3xl rounded-[1.6rem] border border-amber-400/30 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-400/20 p-4 mb-6 shadow-[0_20px_60px_-36px_rgba(245,158,11,0.35)]">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1.5">
-                    <div className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${showSetupCard ? 'text-amber-200' : 'text-emerald-200'}`}>
+                    <div className="inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] shadow-sm border-amber-500/50 bg-amber-50 text-amber-700 dark:bg-background/80 dark:text-amber-400 dark:border-amber-500/25">
                       {t('chat.setupEyebrow')}
                     </div>
-                    <div className="text-sm font-semibold tracking-tight">
+                    <div className="text-[15px] font-semibold tracking-tight text-foreground">
                       {needsWalletSetup
                         ? t('chat.setupWalletTitle')
                         : needsCapSetup
                           ? t('chat.setupCapTitle')
                           : t('chat.setupReadyTitle')}
                     </div>
-                    <p className="max-w-[64ch] text-xs leading-relaxed text-muted-foreground">
+                    <p className="max-w-[64ch] text-[13px] leading-relaxed text-foreground/80">
                       {needsWalletSetup
                         ? t('chat.setupWalletDescription')
                         : needsCapSetup
@@ -193,7 +192,27 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
                         : 'bg-secondary/80 rounded-tl-sm'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    {msg.role === 'assistant' ? (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+                          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children }) => <code className="px-1 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[0.85em]">{children}</code>,
+                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-primary transition-colors">{children}</a>,
+                          h1: ({ children }) => <h1 className="text-base font-bold mb-1.5">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-sm font-bold mb-1">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-semibold mb-1">{children}</h3>,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    ) : (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    )}
                   </div>
 
                   {/* Vault cards */}
