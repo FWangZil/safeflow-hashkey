@@ -75,13 +75,13 @@ function getCapStatusLabel(cap: { active?: boolean; expiresAt?: string | bigint 
 function isEmptyCap(cap: SessionCapData | undefined) {
   if (!cap) return false;
   return (
-    cap.walletId === 0n &&
+    cap.walletId === BigInt(0) &&
     cap.agent.toLowerCase() === ZERO_ADDRESS &&
-    cap.maxSpendPerInterval === 0n &&
-    cap.maxSpendTotal === 0n &&
-    cap.totalSpent === 0n &&
-    cap.intervalSeconds === 0n &&
-    cap.expiresAt === 0n &&
+    cap.maxSpendPerInterval === BigInt(0) &&
+    cap.maxSpendTotal === BigInt(0) &&
+    cap.totalSpent === BigInt(0) &&
+    cap.intervalSeconds === BigInt(0) &&
+    cap.expiresAt === BigInt(0) &&
     !cap.active
   );
 }
