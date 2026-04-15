@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import { AlertTriangle, BarChart3, Droplets, Globe2, MessageSquare, Settings, TrendingUp } from 'lucide-react';
+import { BarChart3, Droplets, MessageSquare, Settings, TrendingUp } from 'lucide-react';
 import VaultExplorer from '@/components/VaultExplorer';
 import ChatAgent from '@/components/ChatAgent';
 import DepositModal from '@/components/DepositModal';
@@ -81,7 +81,6 @@ export default function PageApp() {
         executionChain: runtimeMode.executionChainName,
         sourceChain: runtimeMode.sourceChainName,
       });
-  const runtimeBadgeLabel = runtimeMode.isLocalFork ? t('runtime.localBadge') : t('runtime.baseBadge');
   const runtimeFooterLabel = runtimeMode.isLocalFork ? t('runtime.footerLocal') : t('runtime.footerBase');
 
   return (
@@ -89,7 +88,7 @@ export default function PageApp() {
       {/* Header */}
       <header className="glass header-accent sticky top-0 z-50 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center h-14">
             {/* Logo */}
             <div className="flex items-center gap-2.5">
               <img
@@ -122,18 +121,7 @@ export default function PageApp() {
             </nav>
 
             {/* Right controls */}
-            <div className="flex items-center gap-1.5">
-              <div
-                title={runtimeBadgeTitle}
-                className={`hidden sm:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] uppercase backdrop-blur-md ${
-                  runtimeMode.isLocalFork
-                    ? 'border-amber-500/50 bg-amber-50 text-amber-700 dark:border-amber-400/35 dark:bg-amber-500/10 dark:text-amber-300'
-                    : 'border-emerald-500/40 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300'
-                }`}
-              >
-                {runtimeMode.isLocalFork ? <AlertTriangle className="w-3.5 h-3.5" /> : <Globe2 className="w-3.5 h-3.5" />}
-                <span>{runtimeBadgeLabel}</span>
-              </div>
+            <div className="flex items-center gap-1.5 justify-self-end">
               {runtimeMode.isLocalFork && isConnected && (
                 <button
                   onClick={fundWithTestUSDC}
@@ -301,7 +289,7 @@ export default function PageApp() {
 
       {/* Footer */}
       <footer className="border-t border-border py-3 mt-auto relative z-1">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-1.5 text-[11px] text-muted-foreground/70 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center gap-1.5 text-[11px] text-muted-foreground/70 sm:flex-row sm:justify-center sm:gap-4">
           <span>{t('footer.left')}</span>
           <span
             title={runtimeBadgeTitle}

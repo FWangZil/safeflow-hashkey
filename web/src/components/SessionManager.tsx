@@ -394,41 +394,6 @@ export default function SessionManager() {
     );
   }
 
-  function renderExecutionChainNotice() {
-    if (!LOCAL_FORK_ENABLED) return null;
-
-    return (
-      <div className="sm:col-span-2 rounded-2xl border border-amber-400/30 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-400/20 p-4 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <div className="font-semibold text-amber-800 dark:text-amber-100">{t('settings.executionChainTitle')}</div>
-            <div className="text-xs text-amber-700/90 dark:text-amber-100/80">
-              {t('settings.executionChainDescription', { chainName: LOCAL_FORK_NAME, chainId: LOCAL_FORK_CHAIN_ID })}
-            </div>
-          </div>
-          {isWrongExecutionChain ? (
-            <button
-              onClick={switchOrAddChain}
-              disabled={isSwitchingChain || !targetChain}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-700 dark:bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 dark:hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              {isSwitchingChain ? t('settings.waitingForWallet') : t('settings.switchChain', { chainName: LOCAL_FORK_NAME })}
-            </button>
-          ) : (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 dark:border-emerald-400/20 px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-200">
-              {t('settings.executionChainReady')}
-            </div>
-          )}
-        </div>
-        {switchError && (
-          <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
-            {switchError}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   function renderResourceCenter() {
     const steps = [
       {
@@ -978,7 +943,6 @@ export default function SessionManager() {
   if (!IS_CONFIGURED) {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
-        {renderExecutionChainNotice()}
         <div className="sm:col-span-2 rounded-2xl border border-warning/20 bg-warning/10 p-4 text-sm text-warning-foreground">
           <AlertTriangle className="mr-1.5 inline w-4 h-4 text-warning" />
           {t('settings.contractMissing')}
@@ -991,7 +955,6 @@ export default function SessionManager() {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {renderExecutionChainNotice()}
       <div className="sm:col-span-2 flex items-center justify-between rounded-xl bg-secondary/30 p-3 text-xs">
         <span className="text-muted-foreground">{t('settings.contractAddress')}</span>
         {contractExplorerUrl ? (
