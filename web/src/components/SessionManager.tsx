@@ -24,6 +24,7 @@ import {
   LOCAL_FORK_CHAIN_ID,
   LOCAL_FORK_ENABLED,
   LOCAL_FORK_NAME,
+  SAFEFLOW_CHAIN_ID,
 } from '@/lib/chains';
 import { useSwitchOrAddChain } from '@/lib/useSwitchOrAddChain';
 import { useTranslation } from '@/i18n';
@@ -90,10 +91,11 @@ export default function SessionManager() {
   const { t } = useTranslation();
   const { address, isConnected, chainId } = useAccount();
   const { currentWallets, currentCaps, importCap, upsertCap, upsertWallet, clearCurrentResources } = useSafeFlowResources();
-  const contractChainId = LOCAL_FORK_ENABLED ? LOCAL_FORK_CHAIN_ID : chainId;
-  const targetChain = LOCAL_FORK_ENABLED ? getSupportedWalletChain(LOCAL_FORK_CHAIN_ID) : undefined;
-  const { isSwitchingChain, switchError, switchOrAddChain } = useSwitchOrAddChain(targetChain, LOCAL_FORK_CHAIN_ID);
-  const isWrongExecutionChain = LOCAL_FORK_ENABLED && chainId !== LOCAL_FORK_CHAIN_ID;
+  const requiredChainId = LOCAL_FORK_ENABLED ? LOCAL_FORK_CHAIN_ID : SAFEFLOW_CHAIN_ID;
+  const contractChainId = requiredChainId ?? chainId;
+  const targetChain = requiredChainId != null ? getSupportedWalletChain(requiredChainId) : undefined;
+  const { isSwitchingChain, switchError, switchOrAddChain } = useSwitchOrAddChain(targetChain, requiredChainId ?? chainId ?? 1);
+  const isWrongExecutionChain = requiredChainId != null && chainId !== requiredChainId;
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const [lastCreatedWalletId, setLastCreatedWalletId] = useState('');
   const [lastCreatedCapId, setLastCreatedCapId] = useState('');

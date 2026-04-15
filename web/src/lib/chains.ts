@@ -49,6 +49,11 @@ export function getSupportedWalletChain(chainId: number): Chain | undefined {
   return walletChains.find(chain => chain.id === chainId);
 }
 
+// The chain where the SafeFlow contract is deployed (non-fork mode)
+export const SAFEFLOW_CHAIN_ID: number | undefined = process.env.NEXT_PUBLIC_SAFEFLOW_CHAIN_ID
+  ? Number(process.env.NEXT_PUBLIC_SAFEFLOW_CHAIN_ID)
+  : undefined;
+
 export function getExecutionChainId(vaultChainId: number): number {
   if (LOCAL_FORK_ENABLED && vaultChainId === LOCAL_FORK_SOURCE_CHAIN_ID) {
     return localBaseForkChain.id;
