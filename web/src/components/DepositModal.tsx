@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { X, Loader2, CheckCircle, ExternalLink, AlertTriangle, Coins, Shield } from 'lucide-react';
-import { useAccount, usePublicClient, useReadContract, useWriteContract } from 'wagmi';
-import { keccak256, parseUnits, stringToHex } from 'viem';
+import { X, Loader2, CheckCircle, ExternalLink, AlertTriangle, Coins, Shield, ArrowDownUp } from 'lucide-react';
+import { useAccount, useBalance, usePublicClient, useReadContract, useSendTransaction, useWriteContract } from 'wagmi';
+import { formatUnits, keccak256, parseUnits, stringToHex } from 'viem';
 import type { EarnVault, ComposerQuote } from '@/types';
 import { formatTvl } from '@/lib/earn-api';
-import { getChainExplorerTxUrl, getExecutionChainDisplayName, getExecutionChainId, getSupportedWalletChain } from '@/lib/chains';
+import { getChainExplorerTxUrl, getExecutionChainDisplayName, getExecutionChainId, getSupportedWalletChain, LOCAL_FORK_SOURCE_CHAIN_ID } from '@/lib/chains';
 import { ERC20_ABI, getSafeFlowAddress, SAFEFLOW_VAULT_ABI } from '@/lib/contracts';
 import { useSwitchOrAddChain } from '@/lib/useSwitchOrAddChain';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
 import type { LiFiRoute } from '@/lib/composer';
+import { type TokenInfo, ETH_ADDRESS, getSwapTokensForChain } from '@/lib/tokens';
 
 interface DepositModalProps {
   vault: EarnVault;
@@ -19,7 +20,7 @@ interface DepositModalProps {
   onOpenSettings?: () => void;
 }
 
-type DepositStep = 'input' | 'quoting' | 'confirm' | 'executing' | 'success' | 'error';
+type DepositStep = 'input' | 'quoting' | 'confirm' | 'swapping' | 'executing' | 'success' | 'error';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
