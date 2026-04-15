@@ -79,10 +79,12 @@ export default function RecallActionCard({
       upsertCap({
         capId: newCapId,
         walletId,
-        agentAddress: connectedAddress ?? '',
+        agentAddress: (connectedAddress ?? '0x0') as `0x${string}`,
+        savedForAddress: (connectedAddress ?? '0x0') as `0x${string}`,
         chainId,
         expiresAt: String(Math.floor(Date.now() / 1000) + parseInt(newCapExpiryHours, 10) * 3600),
         active: true,
+        source: 'created',
       });
     }
     setCreateCapStep('done');

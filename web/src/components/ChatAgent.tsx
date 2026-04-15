@@ -45,7 +45,7 @@ export default function ChatAgent({ onSelectVault, onOpenSettings, initialMessag
 
   // Auto-send when triggered from Portfolio "Ask AI to Recall"
   const lastInitialMessage = useRef<string>('');
-  const pendingRecallRef = useRef<RecallActionData | undefined>();
+  const pendingRecallRef = useRef<RecallActionData | undefined>(undefined);
   useEffect(() => {
     if (!initialMessage || initialMessage === lastInitialMessage.current) return;
     lastInitialMessage.current = initialMessage;
