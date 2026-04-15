@@ -22,7 +22,7 @@ contract SafeFlowVaultTest is Test {
 
         // Owner creates wallet
         vm.startPrank(owner);
-        walletId = vault.createWallet();
+        walletId = vault.createWallet("Test Wallet");
 
         // Mint and deposit USDC
         usdc.mint(owner, 10_000e6);
@@ -36,7 +36,8 @@ contract SafeFlowVaultTest is Test {
             1000e6,         // maxSpendPerInterval
             5000e6,         // maxSpendTotal
             3600,           // intervalSeconds (1 hour)
-            uint64(block.timestamp + 1 days) // expiresAt
+            uint64(block.timestamp + 1 days), // expiresAt
+            "Test Session"
         );
         vm.stopPrank();
     }
@@ -45,6 +46,7 @@ contract SafeFlowVaultTest is Test {
         SafeFlowVault.Wallet memory w = vault.getWallet(walletId);
         assertEq(w.owner, owner);
         assertTrue(w.exists);
+        assertEq(w.name, "Test Wallet");
     }
 
     function test_Deposit() public view {
@@ -71,6 +73,7 @@ contract SafeFlowVaultTest is Test {
         assertEq(cap.maxSpendPerInterval, 1000e6);
         assertEq(cap.maxSpendTotal, 5000e6);
         assertTrue(cap.active);
+        assertEq(cap.name, "Test Session");
     }
 
     function test_ExecuteDeposit() public {
@@ -198,13 +201,13 @@ contract SafeFlowVaultTest is Test {
     function test_CreateSessionCapRevertZeroAddress() public {
         vm.prank(owner);
         vm.expectRevert(SafeFlowVault.ZeroAddress.selector);
-        vault.createSessionCap(walletId, address(0), 1000e6, 5000e6, 3600, uint64(block.timestamp + 1 days));
+        vault.createSessionCap(walletId, address(0), 1000e6, 5000e6, 3600, uint64(block.timestamp + 1 days), "Cap");
     }
 
     function test_CreateSessionCapRevertNotOwner() public {
         vm.prank(agent);
         vm.expectRevert(SafeFlowVault.NotOwner.selector);
-        vault.createSessionCap(walletId, agent, 1000e6, 5000e6, 3600, uint64(block.timestamp + 1 days));
+        vault.createSessionCap(walletId, agent, 1000e6, 5000e6, 3600, uint64(block.timestamp + 1 days), "Cap");
     }
 
     function test_RevokeSessionCapRevertNotOwner() public {
@@ -222,8 +225,8 @@ contract SafeFlowVaultTest is Test {
     function test_ExecuteDepositRevertInsufficientBalance() public {
         // Create a new wallet with no balance
         vm.startPrank(owner);
-        uint256 emptyWallet = vault.createWallet();
-        uint256 emptyCap = vault.createSessionCap(emptyWallet, agent, 1000e6, 5000e6, 3600, uint64(block.timestamp + 1 days));
+        uint256 emptyWallet = vault.createWallet("Empty Wallet");
+        uint256 emptyCap = vault.createSessionCap(emptyWallet, agent, 1000e6, 5000e6, 3600, uint64(block.timestamp + 1 days), "Empty Session");
         vm.stopPrank();
 
         vm.prank(agent);
@@ -276,5 +279,135 @@ contract SafeFlowVaultTest is Test {
         (uint256 intervalRem, uint256 totalRem) = vault.getRemainingAllowance(capId);
         assertEq(intervalRem, 0);
         assertEq(totalRem, 0);
+    }
+
+    // ─── Paginated Query Tests ────────────────────────────────
+
+    function test_GetWalletsByOwner() public {
+        vm.startPrank(owner);
+        vault.createWallet("Wallet B");
+        vault.createWallet("Wallet C");
+        vm.stopPrank();
+
+        assertEq(vault.getWalletCountByOwner(owner), 3);
+
+        (uint256[] memory ids, SafeFlowVault.Wallet[] memory data) = vault.getWalletsByOwner(owner, 0, 10);
+        assertEq(ids.length, 3);
+        assertEq(data[0].name, "Test Wallet");
+        assertEq(data[1].name, "Wallet B");
+        assertEq(data[2].name, "Wallet C");
+
+        // Pagination
+        (uint256[] memory page1,) = vault.getWalletsByOwner(owner, 0, 2);
+        assertEq(page1.length, 2);
+        (uint256[] memory page2,) = vault.getWalletsByOwner(owner, 2, 2);
+        assertEq(page2.length, 1);
+
+        // Offset out of range
+        (uint256[] memory empty,) = vault.getWalletsByOwner(owner, 10, 5);
+        assertEq(empty.length, 0);
+    }
+
+    function test_GetCapsByAgent() public {
+        vm.startPrank(owner);
+        vault.createSessionCap(walletId, agent, 500e6, 2000e6, 1800, uint64(block.timestamp + 2 days), "Cap B");
+        vault.createSessionCap(walletId, agent, 200e6, 1000e6, 900, uint64(block.timestamp + 3 days), "Cap C");
+        vm.stopPrank();
+
+        assertEq(vault.getCapCountByAgent(agent), 3);
+
+        (uint256[] memory ids, SafeFlowVault.SessionCap[] memory data) = vault.getCapsByAgent(agent, 0, 10);
+        assertEq(ids.length, 3);
+        assertEq(data[0].name, "Test Session");
+        assertEq(data[1].name, "Cap B");
+        assertEq(data[2].name, "Cap C");
+    }
+
+    // ─── executeCall Tests ────────────────────────────────────
+
+    function test_ExecuteCallDeposit() public {
+        // amountIn > 0: behaves like executeDeposit — spending cap is enforced
+        bytes memory callData = abi.encodeWithSignature("transfer(address,uint256)", recipient, 400e6);
+
+        vm.prank(agent);
+        vault.executeCall(capId, address(usdc), callData, address(usdc), 400e6, address(0), keccak256("call-deposit"));
+
+        SafeFlowVault.SessionCap memory cap = vault.getSessionCap(capId);
+        assertEq(cap.totalSpent, 400e6);
+        assertEq(vault.getBalance(walletId, address(usdc)), 9600e6);
+        assertEq(usdc.balanceOf(recipient), 400e6);
+    }
+
+    function test_ExecuteCallWithdraw() public {
+        // amountIn=0, tokenOut=USDC: no spending cap, inflows auto-credited
+        // Call mints 300 USDC directly into the vault (simulates a DeFi vault returning yield)
+        bytes memory callData = abi.encodeWithSignature("mint(address,uint256)", address(vault), 300e6);
+
+        vm.prank(agent);
+        vault.executeCall(capId, address(usdc), callData, address(0), 0, address(usdc), keccak256("call-withdraw"));
+
+        // Balance should grow — recipient transferred 300 to vault, credited to walletId
+        assertEq(vault.getBalance(walletId, address(usdc)), 10_300e6);
+
+        // No spending cap consumed
+        SafeFlowVault.SessionCap memory cap = vault.getSessionCap(capId);
+        assertEq(cap.totalSpent, 0);
+    }
+
+    function test_ExecuteCallClaim() public {
+        // amountIn=0, tokenOut=address(0): pure call, no cap check, no inflow tracking
+        bytes memory callData = abi.encodeWithSignature("approve(address,uint256)", agent, 0);
+
+        vm.prank(agent);
+        vault.executeCall(capId, address(usdc), callData, address(0), 0, address(0), keccak256("call-claim"));
+
+        // No spending cap consumed
+        SafeFlowVault.SessionCap memory cap = vault.getSessionCap(capId);
+        assertEq(cap.totalSpent, 0);
+    }
+
+    function test_ExecuteCallRevertExpired() public {
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(agent);
+        vm.expectRevert(SafeFlowVault.SessionExpired.selector);
+        vault.executeCall(capId, address(usdc), "", address(0), 0, address(0), keccak256("ev"));
+    }
+
+    function test_ExecuteCallRevertRevoked() public {
+        vm.prank(owner);
+        vault.revokeSessionCap(capId);
+        vm.prank(agent);
+        vm.expectRevert(SafeFlowVault.SessionCapNotActive.selector);
+        vault.executeCall(capId, address(usdc), "", address(0), 0, address(0), keccak256("ev"));
+    }
+
+    function test_ExecuteCallRevertWrongAgent() public {
+        vm.prank(owner);
+        vm.expectRevert(SafeFlowVault.InvalidSessionCap.selector);
+        vault.executeCall(capId, address(usdc), "", address(0), 0, address(0), keccak256("ev"));
+    }
+
+    function test_ExecuteCallRevertExceedsTotalLimit() public {
+        bytes memory callData = abi.encodeWithSignature("transfer(address,uint256)", recipient, 1000e6);
+        vm.startPrank(agent);
+        for (uint256 i; i < 5; i++) {
+            vm.warp(block.timestamp + 3601);
+            vault.executeCall(
+                capId, address(usdc), callData, address(usdc), 1000e6, address(0), keccak256(abi.encode(i))
+            );
+        }
+        vm.warp(block.timestamp + 3601);
+        vm.expectRevert(SafeFlowVault.ExceedsTotalLimit.selector);
+        vault.executeCall(capId, address(usdc), callData, address(usdc), 1000e6, address(0), keccak256("overflow"));
+        vm.stopPrank();
+    }
+
+    function test_ExecuteCallRevertExceedsIntervalLimit() public {
+        bytes memory callData = abi.encodeWithSignature("transfer(address,uint256)", recipient, 600e6);
+        vm.startPrank(agent);
+        vault.executeCall(capId, address(usdc), callData, address(usdc), 600e6, address(0), keccak256("ev1"));
+        vm.expectRevert(SafeFlowVault.ExceedsIntervalLimit.selector);
+        vault.executeCall(capId, address(usdc), callData, address(usdc), 600e6, address(0), keccak256("ev2"));
+        vm.stopPrank();
     }
 }

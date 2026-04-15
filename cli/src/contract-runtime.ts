@@ -20,13 +20,14 @@ import { privateKeyToAccount } from 'viem/accounts';
 const execFileAsync = promisify(execFile);
 
 const safeflowAbi = parseAbi([
-  'function createWallet() returns (uint256)',
+  'function createWallet(string name) returns (uint256)',
   'function deposit(uint256 walletId, address token, uint256 amount)',
-  'function createSessionCap(uint256 walletId, address agent, uint64 maxSpendPerInterval, uint256 maxSpendTotal, uint64 intervalSeconds, uint64 expiresAt) returns (uint256)',
+  'function createSessionCap(uint256 walletId, address agent, uint64 maxSpendPerInterval, uint256 maxSpendTotal, uint64 intervalSeconds, uint64 expiresAt, string name) returns (uint256)',
   'function revokeSessionCap(uint256 capId)',
-  'function getSessionCap(uint256 capId) view returns ((uint256 walletId, address agent, uint64 maxSpendPerInterval, uint256 maxSpendTotal, uint64 intervalSeconds, uint64 expiresAt, uint256 totalSpent, uint64 lastSpendTime, uint256 currentIntervalSpent, bool active))',
+  'function getSessionCap(uint256 capId) view returns ((uint256 walletId, address agent, uint64 maxSpendPerInterval, uint256 maxSpendTotal, uint64 intervalSeconds, uint64 expiresAt, uint256 totalSpent, uint64 lastSpendTime, uint256 currentIntervalSpent, bool active, string name))',
   'function getRemainingAllowance(uint256 capId) view returns (uint256 intervalRemaining, uint256 totalRemaining)',
   'function executeDeposit(uint256 capId, address token, uint256 amount, address vault, bytes32 evidenceHash, bytes callData)',
+  'function executeCall(uint256 capId, address target, bytes callData, address tokenIn, uint256 amountIn, address tokenOut, bytes32 evidenceHash)',
 ]);
 
 const erc20Abi = parseAbi([
@@ -63,7 +64,7 @@ export interface ContractRuntimeOptions {
 
 export interface ContractRuntime {
   backend: ResolvedBackend;
-  createWallet: (contractAddress: Address) => Promise<string>;
+  createWallet: (contractAddress: Address, name?: string) => Promise<string>;
   approveToken: (token: Address, spender: Address, amount: bigint) => Promise<string>;
   depositToWallet: (contractAddress: Address, walletId: bigint, token: Address, amount: bigint) => Promise<string>;
   createSessionCap: (
@@ -74,6 +75,7 @@ export interface ContractRuntime {
     maxTotal: bigint,
     intervalSeconds: bigint,
     expiresAt: bigint,
+    name?: string,
   ) => Promise<string>;
   revokeSessionCap: (contractAddress: Address, capId: bigint) => Promise<string>;
   getSessionCap: (contractAddress: Address, capId: bigint) => Promise<SessionCapInfo>;
@@ -218,11 +220,11 @@ function createCastRuntime(castBinary: string, rpcUrl: string): ContractRuntime 
 
   return {
     backend: 'cast',
-    createWallet: contractAddress => castSend(contractAddress, 'createWallet()', []),
+    createWallet: (contractAddress, name = '') => castSend(contractAddress, 'createWallet(string)', [name]),
     approveToken: (token, spender, amount) => castSend(token, 'approve(address,uint256)', [spender, amount]),
     depositToWallet: (contractAddress, walletId, token, amount) => castSend(contractAddress, 'deposit(uint256,address,uint256)', [walletId, token, amount]),
-    createSessionCap: (contractAddress, walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt) =>
-      castSend(contractAddress, 'createSessionCap(uint256,address,uint64,uint256,uint64,uint64)', [walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt]),
+    createSessionCap: (contractAddress, walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt, name = '') =>
+      castSend(contractAddress, 'createSessionCap(uint256,address,uint64,uint256,uint64,uint64,string)', [walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt, name]),
     revokeSessionCap: (contractAddress, capId) => castSend(contractAddress, 'revokeSessionCap(uint256)', [capId]),
     getSessionCap: async (contractAddress, capId) => {
       const cap = await publicClient.readContract({
@@ -258,14 +260,14 @@ function createViemRuntime(rpcUrl: string): ContractRuntime {
 
   return {
     backend: 'viem',
-    createWallet: async contractAddress => {
+    createWallet: async (contractAddress, name = '') => {
       const hash = await activeWalletClient.writeContract({
         chain: null,
         account: account ?? undefined,
         address: contractAddress,
         abi: safeflowAbi,
         functionName: 'createWallet',
-        args: [],
+        args: [name],
       });
       return waitForWrite(hash);
     },
@@ -291,14 +293,14 @@ function createViemRuntime(rpcUrl: string): ContractRuntime {
       });
       return waitForWrite(hash);
     },
-    createSessionCap: async (contractAddress, walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt) => {
+    createSessionCap: async (contractAddress, walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt, name = '') => {
       const hash = await activeWalletClient.writeContract({
         chain: null,
         account: account ?? undefined,
         address: contractAddress,
         abi: safeflowAbi,
         functionName: 'createSessionCap',
-        args: [walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt],
+        args: [walletId, agent, maxPerInterval, maxTotal, intervalSeconds, expiresAt, name],
       });
       return waitForWrite(hash);
     },

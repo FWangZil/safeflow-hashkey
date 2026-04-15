@@ -784,7 +784,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                  <span className="text-xs font-semibold font-data truncate">{t('vaultModal.capPairLabel', { capId: cap.capId, walletId: wallet.walletId })}</span>
+                                  <span className="text-xs font-semibold font-data truncate">{cap.name ? `${cap.name} · ` : ''}{t('vaultModal.capPairLabel', { capId: cap.capId, walletId: wallet.walletId })}</span>
                                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${status === 'ready' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-destructive/15 text-destructive'}`}>
                                     {status === 'ready' ? t('vaultModal.capReadyBadge') : status === 'expired' ? t('vaultModal.capExpiredBadge') : t('vaultModal.capInactiveBadge')}
                                   </span>

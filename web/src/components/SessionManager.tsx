@@ -90,7 +90,7 @@ function isEmptyCap(cap: SessionCapData | undefined) {
 export default function SessionManager() {
   const { t } = useTranslation();
   const { address, isConnected, chainId } = useAccount();
-  const { currentWallets, currentCaps, importCap, upsertCap, upsertWallet, clearCurrentResources } = useSafeFlowResources();
+  const { currentWallets, currentCaps, importCap, upsertCap, upsertWallet, clearCurrentResources, isSyncing, chainSyncError } = useSafeFlowResources();
   const requiredChainId = LOCAL_FORK_ENABLED ? LOCAL_FORK_CHAIN_ID : SAFEFLOW_CHAIN_ID;
   const contractChainId = requiredChainId ?? chainId;
   const targetChain = requiredChainId != null ? getSupportedWalletChain(requiredChainId) : undefined;
@@ -102,6 +102,7 @@ export default function SessionManager() {
   const [savedQueryCapId, setSavedQueryCapId] = useState('');
   const [resetFeedbackVisible, setResetFeedbackVisible] = useState(false);
 
+  const [walletName, setWalletName] = useState('');
   const [walletStep, setWalletStep] = useState<Step>('idle');
   const { writeContractAsync } = useWriteContract();
   const [walletTxHash, setWalletTxHash] = useState<`0x${string}` | undefined>();
@@ -115,6 +116,7 @@ export default function SessionManager() {
     maxTotal: '5000000',
     intervalSeconds: '3600',
     expiryHours: '24',
+    name: '',
   });
   const [capTxHash, setCapTxHash] = useState<`0x${string}` | undefined>();
   const { data: capReceipt, isSuccess: capTxSuccess } = useWaitForTransactionReceipt({ hash: capTxHash, chainId: contractChainId });
@@ -177,8 +179,10 @@ export default function SessionManager() {
         const walletId = String(decoded.args.walletId);
         setLastCreatedWalletId(walletId);
         setCapForm(current => ({ ...current, walletId }));
+        const decodedName = 'name' in decoded.args ? String(decoded.args.name) : undefined;
         upsertWallet({
           walletId,
+          name: walletName || decodedName || undefined,
           savedForAddress: address,
           chainId: contractChainId,
           txHash: walletTxHash,
@@ -211,6 +215,7 @@ export default function SessionManager() {
         upsertCap({
           capId,
           walletId,
+          name: capForm.name || undefined,
           agentAddress,
           savedForAddress: address,
           chainId: contractChainId,
@@ -262,6 +267,7 @@ export default function SessionManager() {
         address: CONTRACT_ADDRESS,
         abi: SAFEFLOW_VAULT_ABI,
         functionName: 'createWallet',
+        args: [walletName],
         chainId: contractChainId,
       });
       setWalletTxHash(hash);
@@ -291,6 +297,7 @@ export default function SessionManager() {
           BigInt(capForm.maxTotal),
           BigInt(capForm.intervalSeconds),
           expiresAt,
+          capForm.name,
         ],
         chainId: contractChainId,
       });
@@ -546,18 +553,26 @@ export default function SessionManager() {
         ) : (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t('settings.walletLibrary')}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground flex items-center gap-2">
+              {t('settings.walletLibrary')}
+              {isSyncing && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+            </div>
+            {chainSyncError && (
+              <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                {t('settings.chainSyncError')}: {chainSyncError}
+              </div>
+            )}
               {currentWallets.map((wallet: SafeFlowWalletResource) => (
                 <div key={`${wallet.savedForAddress}-${wallet.walletId}`} className="rounded-2xl border border-border bg-secondary/30 p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{t('settings.walletId')}</div>
-                      <div className="mt-1 font-data text-base font-semibold">{wallet.walletId}</div>
+                      <div className="mt-1 font-data text-base font-semibold">{wallet.name ? `${wallet.name} · #${wallet.walletId}` : wallet.walletId}</div>
                     </div>
                     {renderCopyButton(`wallet-${wallet.walletId}`, wallet.walletId)}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-muted-foreground">
-                    <span className="rounded-full border border-border bg-card/80 px-2.5 py-1">{wallet.source === 'created' ? t('settings.sourceCreated') : t('settings.sourceImported')}</span>
+                    <span className="rounded-full border border-border bg-card/80 px-2.5 py-1">{wallet.source === 'created' ? t('settings.sourceCreated') : wallet.source === 'synced-chain' ? t('settings.sourceSyncedChain') : t('settings.sourceImported')}</span>
                     <button
                       onClick={() => setCapForm(current => ({ ...current, walletId: wallet.walletId }))}
                       className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-primary transition hover:border-primary/30 hover:bg-primary/15"
@@ -582,7 +597,7 @@ export default function SessionManager() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <div className="font-data text-base font-semibold">{t('settings.capShort', { capId: cap.capId })}</div>
+                          <div className="font-data text-base font-semibold">{cap.name ? `${cap.name} · #${cap.capId}` : t('settings.capShort', { capId: cap.capId })}</div>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${cap.active === false || isExpired(cap.expiresAt) ? 'bg-destructive/15 text-destructive' : 'bg-emerald-500/15 text-emerald-300'}`}>
                             {getCapStatusLabel(cap, t)}
                           </span>
@@ -593,7 +608,7 @@ export default function SessionManager() {
                       {renderCopyButton(`cap-${cap.capId}`, cap.capId)}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-muted-foreground">
-                      <span className="rounded-full border border-border bg-card/80 px-2.5 py-1">{cap.source === 'created' ? t('settings.sourceCreated') : t('settings.sourceImported')}</span>
+                      <span className="rounded-full border border-border bg-card/80 px-2.5 py-1">{cap.source === 'created' ? t('settings.sourceCreated') : cap.source === 'synced-chain' ? t('settings.sourceSyncedChain') : t('settings.sourceImported')}</span>
                       <button
                         onClick={() => {
                           setQueryCapId(cap.capId);
@@ -672,6 +687,16 @@ export default function SessionManager() {
           </h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t('settings.createWalletDescription')}</p>
           <div className="mt-4 space-y-3">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t('settings.walletNameLabel')}</label>
+              <input
+                type="text"
+                placeholder={t('settings.walletNamePlaceholder')}
+                value={walletName}
+                onChange={event => setWalletName(event.target.value)}
+                className="w-full rounded-xl border border-border bg-input px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
+            </div>
             {walletStep === 'success' ? (
               <div className="space-y-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-xs text-emerald-200">
                 <div className="flex items-center gap-2">
@@ -796,6 +821,17 @@ export default function SessionManager() {
                   className="w-full rounded-xl border border-border bg-input px-3 py-2 text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/50"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{t('settings.capNameLabel')}</label>
+              <input
+                type="text"
+                placeholder={t('settings.capNamePlaceholder')}
+                value={capForm.name}
+                onChange={event => setCapForm(current => ({ ...current, name: event.target.value }))}
+                className="w-full rounded-xl border border-border bg-input px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+              />
             </div>
 
             {capStep === 'success' ? (

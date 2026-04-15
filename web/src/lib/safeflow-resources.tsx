@@ -1,20 +1,24 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
+import { LOCAL_FORK_ENABLED, LOCAL_FORK_CHAIN_ID } from '@/lib/chains';
+import { SAFEFLOW_VAULT_ABI, getSafeFlowAddress } from '@/lib/contracts';
 
 export type SafeFlowWalletResource = {
   walletId: string;
+  name?: string;
   savedForAddress: `0x${string}`;
   chainId?: number;
   txHash?: `0x${string}`;
-  source: 'created' | 'imported';
+  source: 'created' | 'imported' | 'synced-chain';
   createdAt: number;
 };
 
 export type SafeFlowCapResource = {
   capId: string;
   walletId: string;
+  name?: string;
   agentAddress: `0x${string}`;
   savedForAddress: `0x${string}`;
   chainId?: number;
@@ -25,7 +29,7 @@ export type SafeFlowCapResource = {
   totalSpent?: string;
   active?: boolean;
   txHash?: `0x${string}`;
-  source: 'created' | 'imported';
+  source: 'created' | 'imported' | 'synced-chain';
   createdAt: number;
 };
 
@@ -44,6 +48,7 @@ type SafeFlowResourceState = {
 type ImportCapParams = {
   capId: string;
   walletId: string;
+  name?: string;
   agentAddress: `0x${string}`;
   chainId?: number;
   maxSpendPerInterval?: string;
@@ -64,6 +69,8 @@ type SafeFlowResourceContextValue = {
   currentCaps: SafeFlowCapResource[];
   currentAgentCaps: SafeFlowCapResource[];
   lastUsed?: SafeFlowLastUsed;
+  isSyncing: boolean;
+  chainSyncError: string | null;
   upsertWallet: (wallet: Omit<SafeFlowWalletResource, 'createdAt'> & { createdAt?: number }) => void;
   upsertCap: (cap: Omit<SafeFlowCapResource, 'createdAt'> & { createdAt?: number }) => void;
   importCap: (cap: ImportCapParams) => void;
@@ -180,11 +187,21 @@ function upsertCapInState(
   };
 }
 
+const PAGE_SIZE = 50n;
+
 export function SafeFlowResourceProvider({ children }: { children: ReactNode }) {
-  const { address } = useAccount();
+  const { address, chainId } = useAccount();
   const normalizedAddress = normalizeAddress(address);
   const [state, setState] = useState<SafeFlowResourceState>(EMPTY_STATE);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [chainSyncError, setChainSyncError] = useState<string | null>(null);
+
+  const contractAddress = useMemo(() => {
+    try { return getSafeFlowAddress(); } catch { return null; }
+  }, []);
+  const contractChainId = LOCAL_FORK_ENABLED ? LOCAL_FORK_CHAIN_ID : chainId;
+  const publicClient = usePublicClient({ chainId: contractChainId });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -282,6 +299,117 @@ export function SafeFlowResourceProvider({ children }: { children: ReactNode }) 
     [normalizedAddress],
   );
 
+  const syncFromChain = useCallback(async () => {
+    if (!publicClient || !contractAddress || !normalizedAddress) return;
+    setIsSyncing(true);
+    setChainSyncError(null);
+    try {
+      const addr = contractAddress as `0x${string}`;
+      // Sync wallets
+      const walletCount = await publicClient.readContract({
+        address: addr,
+        abi: SAFEFLOW_VAULT_ABI,
+        functionName: 'getWalletCountByOwner',
+        args: [normalizedAddress],
+      }) as bigint;
+      let walletOffset = 0n;
+      while (walletOffset < walletCount) {
+        const [ids, data] = (await publicClient.readContract({
+          address: addr,
+          abi: SAFEFLOW_VAULT_ABI,
+          functionName: 'getWalletsByOwner',
+          args: [normalizedAddress, walletOffset, PAGE_SIZE],
+        })) as unknown as [bigint[], { name: string; owner: `0x${string}`; exists: boolean }[]];
+        setState(current => {
+          let next = current;
+          for (let i = 0; i < ids.length; i++) {
+            const existing = next.wallets.find(
+              w => w.walletId === ids[i].toString() && w.savedForAddress === normalizedAddress,
+            );
+            next = upsertWalletInState(next, {
+              walletId: ids[i].toString(),
+              name: existing?.name ?? (data[i].name || undefined),
+              savedForAddress: normalizedAddress,
+              chainId: contractChainId,
+              txHash: existing?.txHash,
+              source: existing?.source ?? 'synced-chain',
+            }, normalizedAddress);
+          }
+          return next;
+        });
+        walletOffset += PAGE_SIZE;
+      }
+      // Sync caps
+      const capCount = await publicClient.readContract({
+        address: addr,
+        abi: SAFEFLOW_VAULT_ABI,
+        functionName: 'getCapCountByAgent',
+        args: [normalizedAddress],
+      }) as bigint;
+      let capOffset = 0n;
+      while (capOffset < capCount) {
+        const [capIds, capData] = (await publicClient.readContract({
+          address: addr,
+          abi: SAFEFLOW_VAULT_ABI,
+          functionName: 'getCapsByAgent',
+          args: [normalizedAddress, capOffset, PAGE_SIZE],
+        })) as unknown as [bigint[], {
+          name: string;
+          walletId: bigint;
+          agent: `0x${string}`;
+          maxSpendPerInterval: bigint;
+          maxSpendTotal: bigint;
+          intervalSeconds: bigint;
+          expiresAt: bigint;
+          totalSpent: bigint;
+          lastSpendTime: bigint;
+          currentIntervalSpent: bigint;
+          active: boolean;
+        }[]];
+        setState(current => {
+          let next = current;
+          for (let i = 0; i < capIds.length; i++) {
+            const cd = capData[i];
+            const existing = next.caps.find(
+              c => c.capId === capIds[i].toString() && c.savedForAddress === normalizedAddress,
+            );
+            next = upsertCapInState(next, {
+              capId: capIds[i].toString(),
+              walletId: cd.walletId.toString(),
+              name: existing?.name ?? (cd.name || undefined),
+              agentAddress: cd.agent,
+              savedForAddress: normalizedAddress,
+              chainId: contractChainId,
+              maxSpendPerInterval: cd.maxSpendPerInterval.toString(),
+              maxSpendTotal: cd.maxSpendTotal.toString(),
+              intervalSeconds: cd.intervalSeconds.toString(),
+              expiresAt: cd.expiresAt.toString(),
+              totalSpent: cd.totalSpent.toString(),
+              active: cd.active,
+              txHash: existing?.txHash,
+              source: existing?.source ?? 'synced-chain',
+            }, normalizedAddress);
+          }
+          return next;
+        });
+        capOffset += PAGE_SIZE;
+      }
+    } catch (err) {
+      setChainSyncError(err instanceof Error ? err.message : 'Chain sync failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [publicClient, contractAddress, normalizedAddress, contractChainId]);
+
+  useEffect(() => {
+    if (isHydrated) syncFromChain();
+  }, [normalizedAddress, contractChainId, isHydrated, syncFromChain]);
+
+  useEffect(() => {
+    const id = setInterval(syncFromChain, 30_000);
+    return () => clearInterval(id);
+  }, [syncFromChain]);
+
   const clearCurrentResources = useCallback(() => {
     if (!normalizedAddress) return;
 
@@ -324,13 +452,15 @@ export function SafeFlowResourceProvider({ children }: { children: ReactNode }) 
       currentCaps,
       currentAgentCaps,
       lastUsed,
+      isSyncing,
+      chainSyncError,
       upsertWallet,
       upsertCap,
       importCap,
       rememberLastUsed,
       clearCurrentResources,
     }),
-    [clearCurrentResources, currentAgentCaps, currentCaps, currentWallets, importCap, isHydrated, lastUsed, state.caps, state.wallets, rememberLastUsed, upsertCap, upsertWallet],
+    [clearCurrentResources, currentAgentCaps, currentCaps, currentWallets, importCap, isHydrated, lastUsed, state.caps, state.wallets, rememberLastUsed, upsertCap, upsertWallet, isSyncing, chainSyncError],
   );
 
   return <SafeFlowResourceContext.Provider value={value}>{children}</SafeFlowResourceContext.Provider>;
