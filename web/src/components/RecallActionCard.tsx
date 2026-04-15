@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { encodeFunctionData, keccak256, toHex } from 'viem';
-import { Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, Wallet } from 'lucide-react';
+import { Loader2, ArrowDownToLine, CheckCircle2, AlertCircle, Wallet, ShieldPlus, ChevronDown, ChevronUp } from 'lucide-react';
 import { getSafeFlowAddress, SAFEFLOW_VAULT_ABI, ERC20_ABI } from '@/lib/contracts';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
 import type { RecallActionData } from '@/types';
@@ -37,14 +37,84 @@ export default function RecallActionCard({
   auditEntryIds,
 }: RecallActionData) {
   const safeFlowAddress = getSafeFlowAddress();
-  const { currentAgentCaps } = useSafeFlowResources();
+  const { currentAgentCaps, upsertCap } = useSafeFlowResources();
   const { writeContractAsync } = useWriteContract();
+  const { address: connectedAddress } = useAccount();
 
-  // Caps active for this wallet
-  const walletCaps = currentAgentCaps.filter(c => String(c.walletId) === walletId && c.active);
-  const [selectedCapId, setSelectedCapId] = useState<string>(
-    initialCapId || (walletCaps[0] ? String(walletCaps[0].capId) : '')
+  // Only show caps that are active AND not expired
+  const nowSec = Math.floor(Date.now() / 1000);
+  const walletCaps = currentAgentCaps.filter(c =>
+    String(c.walletId) === walletId &&
+    c.active &&
+    (!c.expiresAt || Number(c.expiresAt) > nowSec)
   );
+
+  // If the initialCapId is itself expired, fall back to the first valid cap
+  const resolvedInitialCapId = (() => {
+    if (!initialCapId) return walletCaps[0] ? String(walletCaps[0].capId) : '';
+    const init = currentAgentCaps.find(c => String(c.capId) === initialCapId);
+    if (init && init.active && (!init.expiresAt || Number(init.expiresAt) > nowSec)) return initialCapId;
+    return walletCaps[0] ? String(walletCaps[0].capId) : initialCapId; // preserve as text fallback
+  })();
+  const [selectedCapId, setSelectedCapId] = useState<string>(resolvedInitialCapId);
+
+  // Inline "create cap" mini-panel state
+  const [showCreateCap, setShowCreateCap] = useState(false);
+  const [newCapExpiryHours, setNewCapExpiryHours] = useState('24');
+  const [createCapTx, setCreateCapTx] = useState<`0x${string}` | undefined>();
+  const [createCapStep, setCreateCapStep] = useState<'idle' | 'pending' | 'done' | 'error'>('idle');
+  const { isSuccess: createCapConfirmed, data: createCapReceipt } = useWaitForTransactionReceipt({ hash: createCapTx, chainId });
+
+  useEffect(() => {
+    if (!createCapConfirmed || !createCapReceipt) return;
+    // Parse the new capId from CapCreated event (topic[1] is capId as uint256)
+    // Find log from our contract — topic[1] carries the new capId (indexed uint256)
+    const log = createCapReceipt.logs.find(l => l.address.toLowerCase() === safeFlowAddress?.toLowerCase());
+    let newCapId = '';
+    if (log && log.topics[1]) {
+      newCapId = BigInt(log.topics[1]).toString();
+    }
+    if (newCapId) {
+      setSelectedCapId(newCapId);
+      upsertCap({
+        capId: newCapId,
+        walletId,
+        agentAddress: connectedAddress ?? '',
+        chainId,
+        expiresAt: String(Math.floor(Date.now() / 1000) + parseInt(newCapExpiryHours, 10) * 3600),
+        active: true,
+      });
+    }
+    setCreateCapStep('done');
+    setShowCreateCap(false);
+  }, [createCapConfirmed, createCapReceipt, safeFlowAddress, walletId, connectedAddress, chainId, newCapExpiryHours, upsertCap]);
+
+  const handleCreateCap = async () => {
+    if (!connectedAddress) return;
+    setCreateCapStep('pending');
+    try {
+      const expiresAt = BigInt(Math.floor(Date.now() / 1000) + parseInt(newCapExpiryHours, 10) * 3600);
+      const hash = await writeContractAsync({
+        address: safeFlowAddress,
+        abi: SAFEFLOW_VAULT_ABI,
+        functionName: 'createSessionCap',
+        args: [
+          BigInt(walletId),
+          connectedAddress,           // agent = self (owner acts as agent for recall)
+          BigInt('999999999999999999'), // maxSpendPerInterval — high, recall uses amountIn=0
+          BigInt('999999999999999999'), // maxSpendTotal
+          BigInt(3600),               // intervalSeconds
+          expiresAt,
+          'Recall Cap',
+        ],
+        chainId,
+      });
+      setCreateCapTx(hash);
+    } catch (err) {
+      setCreateCapStep('error');
+      console.error(err);
+    }
+  };
 
   const [step1Tx, setStep1Tx] = useState<`0x${string}` | undefined>();
   const [step2Tx, setStep2Tx] = useState<`0x${string}` | undefined>();
@@ -206,11 +276,15 @@ export default function RecallActionCard({
               disabled={step1Done || alreadyRecalled}
               className="flex-1 text-xs bg-background border border-border rounded-md px-2 py-1.5 disabled:opacity-50"
             >
-              {walletCaps.map(c => (
-                <option key={String(c.capId)} value={String(c.capId)}>
-                  {c.name ? `${c.name} · #${c.capId}` : `Cap #${c.capId}`}
-                </option>
-              ))}
+              {walletCaps.map(c => {
+                const expSec = c.expiresAt ? Number(c.expiresAt) : 0;
+                const expLabel = expSec ? new Date(expSec * 1000).toLocaleDateString() : '∞';
+                return (
+                  <option key={String(c.capId)} value={String(c.capId)}>
+                    {c.name ? `${c.name} · #${c.capId}` : `Cap #${c.capId}`} · exp {expLabel}
+                  </option>
+                );
+              })}
             </select>
           ) : (
             <input
@@ -223,6 +297,71 @@ export default function RecallActionCard({
             />
           )}
         </div>
+
+        {/* No valid caps — inline create panel */}
+        {walletCaps.length === 0 && !step1Done && !alreadyRecalled && (
+          <div className="rounded-lg border border-rose-500/30 bg-rose-500/5 overflow-hidden">
+            <button
+              onClick={() => setShowCreateCap(v => !v)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-rose-300 hover:bg-rose-500/10 transition-colors"
+            >
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold">
+                <ShieldPlus className="w-3.5 h-3.5" />
+                All session caps expired — create a new one to proceed
+              </span>
+              {showCreateCap ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            {showCreateCap && (
+              <div className="px-3 pb-3 space-y-2.5 border-t border-rose-500/20 pt-2.5">
+                <p className="text-[10px] text-muted-foreground/70">
+                  A temporary <span className="text-rose-300/80">Recall Cap</span> will be created with your address as agent.
+                  <br/>It only covers the recall operation — spending limits are set to maximum.
+                </p>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-muted-foreground w-24 shrink-0">Expires in</span>
+                  <select
+                    value={newCapExpiryHours}
+                    onChange={e => setNewCapExpiryHours(e.target.value)}
+                    disabled={createCapStep === 'pending'}
+                    className="flex-1 text-xs bg-background border border-border rounded-md px-2 py-1.5"
+                  >
+                    <option value="1">1 hour</option>
+                    <option value="6">6 hours</option>
+                    <option value="24">24 hours</option>
+                    <option value="72">3 days</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-muted-foreground w-24 shrink-0">Agent</span>
+                  <span className="text-[10px] font-mono text-muted-foreground/80 break-all">
+                    {connectedAddress ?? '—'} (you)
+                  </span>
+                </div>
+
+                {createCapStep === 'error' && (
+                  <div className="text-[10px] text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />Transaction failed — check wallet and retry
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCreateCap}
+                  disabled={createCapStep === 'pending' || !!createCapTx}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] font-semibold hover:bg-rose-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {createCapStep === 'pending' || createCapTx ? (
+                    <><Loader2 className="w-3 h-3 animate-spin" />Creating cap…</>
+                  ) : (
+                    <><ShieldPlus className="w-3 h-3" />Create Recall Cap on-chain</>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Shares held by SafeFlow */}
         {!noVaultAddr && !alreadyRecalled && (

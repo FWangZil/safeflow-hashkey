@@ -6,7 +6,7 @@ import { BarChart3, Loader2, Wallet, RefreshCw, Coins, ArrowDownToLine } from 'l
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
 import type { RecallActionData } from '@/types';
-import { LOCAL_FORK_ENABLED, LOCAL_FORK_CHAIN_ID, LOCAL_FORK_NAME } from '@/lib/chains';
+import { LOCAL_FORK_ENABLED, LOCAL_FORK_CHAIN_ID, LOCAL_FORK_SOURCE_CHAIN_ID, LOCAL_FORK_NAME } from '@/lib/chains';
 import { SAFEFLOW_VAULT_ABI, getSafeFlowAddress } from '@/lib/contracts';
 
 interface PortfolioProps {
@@ -265,11 +265,23 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
         );
         setAuditEntries(executed);
 
-        // Fetch real token prices from Binance via our proxy
+        // Fetch real token prices from Binance + LI.FI fallback
         const symbols = [...new Set(executed.map((e) => e.token.toUpperCase()))].filter(Boolean);
+        // Build token context for LI.FI fallback: use source chain (real Base) so LI.FI recognizes tokens
+        const tokenInfoParts: string[] = [];
+        const seenSymbols = new Set<string>();
+        for (const e of executed) {
+          const sym = e.token.toUpperCase();
+          if (seenSymbols.has(sym) || !e.tokenAddress) continue;
+          seenSymbols.add(sym);
+          const chain = LOCAL_FORK_ENABLED ? LOCAL_FORK_SOURCE_CHAIN_ID : (e.chainId ?? 8453);
+          tokenInfoParts.push(`${chain}:${e.tokenAddress}:${sym}:${e.decimals ?? 18}`);
+        }
         let prices: Record<string, number> = {};
         try {
-          const priceRes = await fetch(`/api/prices?symbols=${symbols.join(',')}`);
+          const params = new URLSearchParams({ symbols: symbols.join(',') });
+          if (tokenInfoParts.length > 0) params.set('tokenInfo', tokenInfoParts.join(','));
+          const priceRes = await fetch(`/api/prices?${params.toString()}`);
           if (priceRes.ok) prices = await priceRes.json() as Record<string, number>;
         } catch { /* non-blocking */ }
         setTokenPrices(prices);
