@@ -71,7 +71,14 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
   const [progressLabel, setProgressLabel] = useState('');
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
 
+  // Swap-before-deposit state
+  const [swapMode, setSwapMode] = useState(false);
+  const [swapSourceToken, setSwapSourceToken] = useState<TokenInfo | null>(null);
+  const [swapSourceAmount, setSwapSourceAmount] = useState('');
+  const [swapQuote, setSwapQuote] = useState<ComposerQuote | null>(null);
+
   const { writeContractAsync } = useWriteContract();
+  const { sendTransactionAsync } = useSendTransaction();
   const { currentAgentCaps, currentWallets, currentCaps, importCap, lastUsed, rememberLastUsed } = useSafeFlowResources();
 
   const underlyingToken = vault.underlyingTokens?.[0];
@@ -90,6 +97,43 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
     }
   })();
   const amountWei = amount && parseFloat(amount) > 0 ? parseUnits(amount, tokenDecimals) : BigInt(0);
+
+  // The source chain ID used for token address lookups (local fork uses Base token addresses)
+  const tokenLookupChainId = isNaN(LOCAL_FORK_SOURCE_CHAIN_ID) ? vault.chainId : LOCAL_FORK_SOURCE_CHAIN_ID;
+
+  // User's balance of the vault's underlying token
+  const { data: underlyingBalance } = useBalance({
+    address,
+    token: underlyingToken?.address as `0x${string}` | undefined,
+    chainId: executionChainId,
+    query: { enabled: Boolean(address && underlyingToken?.address) },
+  });
+
+  // User's balance of the selected swap source token
+  const { data: swapSourceBalance } = useBalance({
+    address,
+    token: (swapSourceToken && !swapSourceToken.isNative) ? swapSourceToken.address as `0x${string}` : undefined,
+    chainId: executionChainId,
+    query: { enabled: Boolean(address && swapSourceToken) },
+  });
+  // Native ETH balance (reused when swap source is ETH)
+  const { data: nativeBalance } = useBalance({
+    address,
+    chainId: executionChainId,
+    query: { enabled: Boolean(address) },
+  });
+  const effectiveSwapSourceBalance = swapSourceToken?.isNative ? nativeBalance : swapSourceBalance;
+
+  // Available swap tokens (exclude vault underlying to prevent token→same-token)
+  const swapTokenOptions = useMemo(
+    () => getSwapTokensForChain(tokenLookupChainId, underlyingToken?.address),
+    [tokenLookupChainId, underlyingToken?.address],
+  );
+
+  const insufficientUnderlying = Boolean(
+    amount && parseFloat(amount) > 0 && underlyingBalance &&
+    parseFloat(amount) > parseFloat(underlyingBalance.formatted),
+  );
 
   const { data: capData, isLoading: isCapLoading } = useReadContract({
     address: safeFlowAddress ?? undefined,
@@ -188,7 +232,14 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
   }, [address, capId, capNotFound, isCapLoading, parsedCapData, t]);
 
   const fetchQuote = useCallback(async () => {
-    if (!address || !amount || parseFloat(amount) <= 0 || !safeFlowAddress || !underlyingToken) return;
+    if (!safeFlowAddress || !underlyingToken || !address) return;
+
+    // In swap mode we need: address + swapSourceToken + swapSourceAmount
+    if (swapMode) {
+      if (!swapSourceToken || !swapSourceAmount || parseFloat(swapSourceAmount) <= 0) return;
+    } else {
+      if (!amount || parseFloat(amount) <= 0) return;
+    }
 
     setStep('quoting');
     setError(null);
@@ -218,8 +269,38 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
         throw new Error('Connected wallet is not the authorized SessionCap agent.');
       }
 
-      const fromAmount = parseUnits(amount, tokenDecimals).toString();
+      // ── Step A: if swap mode, get swap quote first (user wallet → user wallet) ──
+      let depositFromAmount: string;
 
+      if (swapMode && swapSourceToken) {
+        const swapFromAmount = parseUnits(swapSourceAmount, swapSourceToken.decimals).toString();
+        const swapParams = new URLSearchParams({
+          fromChain: String(vault.chainId),
+          toChain: String(vault.chainId),
+          fromToken: swapSourceToken.address,
+          toToken: underlyingToken.address,
+          fromAddress: address,
+          toAddress: address,
+          fromAmount: swapFromAmount,
+        });
+        const swapRes = await fetch(`/api/earn/quote?${swapParams.toString()}`);
+        if (!swapRes.ok) {
+          const text = await swapRes.text().catch(() => '');
+          throw new Error(`Swap quote failed (${swapRes.status}): ${text.slice(0, 200)}`);
+        }
+        const swapData: ComposerQuote = await swapRes.json();
+        setSwapQuote(swapData);
+
+        // Amount of underlying token we'll receive from swap
+        depositFromAmount = swapData.estimate.toAmount;
+        const depositAmountHuman = formatUnits(BigInt(depositFromAmount), tokenDecimals);
+        setAmount(depositAmountHuman);
+      } else {
+        depositFromAmount = parseUnits(amount, tokenDecimals).toString();
+        setSwapQuote(null);
+      }
+
+      // ── Step B: get deposit quote (Composer: underlying → vault, via SafeFlow) ──
       const params = new URLSearchParams({
         fromChain: String(vault.chainId),
         toChain: String(vault.chainId),
@@ -227,14 +308,13 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
         toToken: vault.address,
         fromAddress: safeFlowAddress,
         toAddress: safeFlowAddress,
-        fromAmount,
+        fromAmount: depositFromAmount,
       });
 
       const res = await fetch(`/api/earn/quote?${params.toString()}`);
-
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(`Quote failed (${res.status}): ${text.slice(0, 200)}`);
+        throw new Error(`Deposit quote failed (${res.status}): ${text.slice(0, 200)}`);
       }
 
       const data = await res.json();
@@ -247,7 +327,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
         fromTokenAddress: underlyingToken.address,
         toTokenAddress: vault.address,
         fromAddress: safeFlowAddress,
-        fromAmount: params.get('fromAmount') ?? fromAmount,
+        fromAmount: depositFromAmount,
       }).toString()}`)
         .then(r => r.ok ? r.json() : null)
         .then(routeData => {
@@ -260,15 +340,47 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
       setError(err instanceof Error ? err.message : 'Failed to get quote');
       setStep('error');
     }
-  }, [address, amount, capData, safeFlowAddress, tokenDecimals, underlyingToken, vault, walletId]);
+  }, [address, amount, capData, safeFlowAddress, swapMode, swapSourceAmount, swapSourceToken, tokenDecimals, underlyingToken, vault, walletId]);
 
   const executeDeposit = useCallback(async () => {
     if (!quote?.transactionRequest || !safeFlowAddress || !underlyingToken || !publicClient || !address) return;
 
-    setStep('executing');
     setError(null);
 
     try {
+      // ── Phase 1: Execute swap if in swap mode ──────────────────────────────
+      if (swapMode && swapQuote) {
+        setStep('swapping');
+        const swapTx = swapQuote.transactionRequest;
+
+        // If swapSourceToken is ERC20, approve the LI.FI router first
+        if (swapSourceToken && !swapSourceToken.isNative) {
+          const swapFromAmountWei = parseUnits(swapSourceAmount, swapSourceToken.decimals);
+          setProgressLabel(`Approving ${swapSourceToken.symbol} for swap...`);
+          const approvalHash = await writeContractAsync({
+            address: swapSourceToken.address as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: 'approve',
+            args: [swapTx.to as `0x${string}`, swapFromAmountWei],
+            chainId: executionChainId,
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        }
+
+        setProgressLabel(`Swapping ${swapSourceToken?.symbol ?? 'token'} → ${tokenSymbol} via LI.FI...`);
+        const swapHash = await sendTransactionAsync({
+          to: swapTx.to as `0x${string}`,
+          data: swapTx.data as `0x${string}`,
+          value: BigInt(swapTx.value || '0'),
+          chainId: executionChainId,
+        });
+        await publicClient.waitForTransactionReceipt({ hash: swapHash });
+        setProgressLabel('');
+      }
+
+      // ── Phase 2: SafeFlow deposit (existing flow) ──────────────────────────
+      setStep('executing');
+
       const tx = quote.transactionRequest;
       if (BigInt(tx.value || '0') !== BigInt(0)) {
         throw new Error('SafeFlow executeDeposit currently supports ERC-20 deposits only.');
@@ -412,7 +524,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
       setProgressLabel('');
       setStep('error');
     }
-  }, [address, amount, amountWei, capData, capId, chainId, executionChainId, executionChainName, importCap, knownCap, parsedCapData, publicClient, quote, rememberLastUsed, remainingAllowance, safeFlowAddress, tokenAllowance, tokenSymbol, underlyingToken, vault, walletId, writeContractAsync]);
+  }, [address, amount, amountWei, capData, capId, chainId, executionChainId, executionChainName, importCap, knownCap, parsedCapData, publicClient, quote, rememberLastUsed, remainingAllowance, safeFlowAddress, sendTransactionAsync, swapMode, swapQuote, swapSourceAmount, swapSourceToken, tokenAllowance, tokenSymbol, underlyingToken, vault, walletId, writeContractAsync]);
 
   const explorerUrl = getChainExplorerTxUrl(executionChainId, txHash);
 
@@ -773,37 +885,125 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
                       </div>
                     )}
 
-                    <label className="block text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium">
-                      {t('vaultModal.amountLabel', { tokenSymbol })}
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={amount}
-                      onChange={e => setAmount(e.target.value)}
-                      placeholder={`0.00 ${tokenSymbol}`}
-                      className="w-full px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40"
-                    />
-                    <div className="flex gap-1.5 mt-1.5">
-                      {['0.01', '0.02', '0.05', '0.1'].map(preset => (
-                        <button
-                          key={preset}
-                          onClick={() => setAmount(preset)}
-                          className="px-2 py-0.5 bg-secondary/80 rounded-md text-[10px] font-data hover:bg-secondary transition-colors"
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
+                    {/* Balance + insufficient warning (non-swap mode) */}
+                    {!swapMode && (
+                      <>
+                        <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <label className="uppercase tracking-wider font-medium">
+                            {t('vaultModal.amountLabel', { tokenSymbol })}
+                          </label>
+                          {underlyingBalance && (
+                            <span className="font-data">Balance: {parseFloat(underlyingBalance.formatted).toFixed(4)} {tokenSymbol}</span>
+                          )}
+                        </div>
+                        {insufficientUnderlying && (
+                          <div className="mb-2 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-2 text-xs">
+                            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-400" />
+                            <div className="flex-1">
+                              <div className="font-medium text-amber-300">Insufficient {tokenSymbol}</div>
+                              <button
+                                onClick={() => {
+                                  setSwapMode(true);
+                                  if (swapTokenOptions.length > 0) setSwapSourceToken(swapTokenOptions[0]);
+                                }}
+                                className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/20 rounded-lg text-amber-200 font-semibold transition"
+                              >
+                                <ArrowDownUp className="w-3 h-3" />
+                                Swap first via LI.FI
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={amount}
+                          onChange={e => setAmount(e.target.value)}
+                          placeholder={`0.00 ${tokenSymbol}`}
+                          className="w-full px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        />
+                        <div className="flex gap-1.5 mt-1.5">
+                          {['0.01', '0.02', '0.05', '0.1'].map(preset => (
+                            <button
+                              key={preset}
+                              onClick={() => setAmount(preset)}
+                              className="px-2 py-0.5 bg-secondary/80 rounded-md text-[10px] font-data hover:bg-secondary transition-colors"
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Swap-mode section */}
+                    {swapMode && (
+                      <div className="p-3 bg-primary/5 border border-primary/15 rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] uppercase tracking-[0.14em] font-semibold text-primary/60 flex items-center gap-1">
+                            <ArrowDownUp className="w-3 h-3" />
+                            Swap via LI.FI → then deposit
+                          </div>
+                          <button
+                            onClick={() => { setSwapMode(false); setSwapSourceToken(null); setSwapSourceAmount(''); setSwapQuote(null); }}
+                            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-medium">
+                            Swap from
+                          </label>
+                          <div className="flex gap-2">
+                            <select
+                              value={swapSourceToken?.address ?? ''}
+                              onChange={e => {
+                                const tok = swapTokenOptions.find(x => x.address === e.target.value);
+                                setSwapSourceToken(tok ?? null);
+                              }}
+                              className="flex-1 px-3 py-2 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            >
+                              <option value="" disabled>Select token</option>
+                              {swapTokenOptions.map(tok => (
+                                <option key={tok.address} value={tok.address}>{tok.symbol}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={swapSourceAmount}
+                              onChange={e => setSwapSourceAmount(e.target.value)}
+                              placeholder="0.00"
+                              className="w-28 px-3 py-2 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            />
+                          </div>
+                          {swapSourceToken && effectiveSwapSourceBalance && (
+                            <div className="mt-1 text-right text-[10px] text-muted-foreground font-data">
+                              Balance: {parseFloat(effectiveSwapSourceBalance.formatted).toFixed(4)} {swapSourceToken.symbol}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Deposit amount ({tokenSymbol}) will be computed from swap output.
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <button
                     onClick={fetchQuote}
-                    disabled={!amount || parseFloat(amount) <= 0 || !walletId || !capId || capValidation?.tone === 'error'}
+                    disabled={
+                      !walletId || !capId || capValidation?.tone === 'error' ||
+                      (swapMode
+                        ? !swapSourceToken || !swapSourceAmount || parseFloat(swapSourceAmount) <= 0
+                        : !amount || parseFloat(amount) <= 0)
+                    }
                     className="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-lg shadow-primary/20 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
-                    {t('vaultModal.buildQuote')}
+                    {swapMode ? `Swap ${swapSourceToken?.symbol ?? ''} + Deposit` : t('vaultModal.buildQuote')}
                   </button>
                   <p className="text-[10px] text-muted-foreground/50 text-center flex items-center justify-center gap-1">
                     <Shield className="w-3 h-3" />
@@ -814,6 +1014,12 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
                 <div className="flex-1 flex flex-col items-center justify-center py-16">
                   <Loader2 className="w-6 h-6 animate-spin text-primary mb-3" />
                   <p className="text-sm text-muted-foreground text-center">Building SafeFlow-compatible transaction via LI.FI Composer...</p>
+                </div>
+              ) : step === 'swapping' ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-16">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary mb-3" />
+                  <p className="text-sm text-muted-foreground text-center">{progressLabel || `Swapping via LI.FI...`}</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1 text-center">Step 1 of 2 — swap will be followed by SafeFlow deposit</p>
                 </div>
               ) : step === 'confirm' && quote ? (
                 <div className="space-y-3">
@@ -849,6 +1055,21 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
                       <span className="font-data">{executionChainName}</span>
                     </div>
                   </div>
+
+                  {/* Swap preview — shown when swap-before-deposit is active */}
+                  {swapQuote && swapSourceToken && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5 text-xs">
+                      <div className="text-[10px] uppercase tracking-[0.14em] font-semibold text-amber-400/70">Step 1 — Swap via LI.FI</div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">From</span>
+                        <span className="font-data font-semibold">{swapSourceAmount} {swapSourceToken.symbol}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">To (approx.)</span>
+                        <span className="font-data">{formatUnits(BigInt(swapQuote.estimate.toAmount), tokenDecimals)} {tokenSymbol}</span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* LI.FI Route info */}
                   {routeInfo && routeInfo.steps.length > 0 && (
