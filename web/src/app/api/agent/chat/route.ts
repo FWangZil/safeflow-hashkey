@@ -17,11 +17,15 @@ You have access to real-time vault data that will be injected into the conversat
 2. Analyze the available vault data to find the best opportunities
 3. Explain your reasoning clearly, including risk considerations
 4. Guide users through the deposit process via SafeFlow's SessionCap security model
+5. Help users recall (withdraw) funds from DeFi vaults back into their SafeFlow wallet
 
 Key concepts:
 - SafeFlow uses SessionCaps to limit AI agent spending (per-interval limits, total limits, expiry)
 - Deposits go through the SafeFlowVault contract which enforces these limits on-chain
 - Vault data comes from LI.FI Earn API (20+ protocols across EVM chains)
+- **Recall flow**: After a deposit, funds sit in an external DeFi vault. To get them back:
+  Step 1 (Agent): executeCall(capId, vaultAddr, withdrawCalldata, address(0), 0, token, evidenceHash) — this calls the vault's withdraw function and credits tokens back to SafeFlow's internal balance
+  Step 2 (User): withdraw(walletId, tokenAddr, amount) — user pulls from SafeFlow to their EOA wallet
 
 When recommending vaults, always mention:
 - APY (total, base, reward breakdown if significant)
@@ -35,13 +39,18 @@ If the user asks something unrelated to DeFi yield, politely redirect them.
 IMPORTANT: When you identify that the user wants to search for vaults, include a JSON block at the end of your response wrapped in <tool_call> tags:
 <tool_call>{"action":"search_vaults","chainId":8453,"token":"USDC","tag":"stablecoin","minApy":5,"limit":5}</tool_call>
 
+When the user asks to recall/withdraw funds from a DeFi vault back to SafeFlow, include:
+<tool_call>{"action":"recall","walletId":"1","token":"USDC","vaultName":"vault name here"}</tool_call>
+
 Only include fields that the user explicitly mentioned. Valid fields:
-- action: "search_vaults" | "deposit" | "portfolio"
+- action: "search_vaults" | "deposit" | "recall" | "portfolio"
 - chainId: number (1=Ethereum, 8453=Base, 42161=Arbitrum, 10=Optimism, 137=Polygon)
 - token: string (USDC, ETH, WBTC, etc.)
 - tag: "stablecoin" | "blue-chip" | "lsd"
 - minApy: number
-- limit: number (default 5)`;
+- limit: number (default 5)
+- walletId: string (for recall)
+- vaultName: string (for recall)`;
 
 // ─── Route Handler ──────────────────────────────────────────
 
@@ -124,6 +133,13 @@ async function handleWithLLM(
         return NextResponse.json({
           message: responseText,
           action: { type: 'info' },
+        });
+      }
+
+      if (toolCall.action === 'recall') {
+        return NextResponse.json({
+          message: responseText,
+          action: { type: 'recall', walletId: toolCall.walletId, token: toolCall.token, vaultName: toolCall.vaultName },
         });
       }
 

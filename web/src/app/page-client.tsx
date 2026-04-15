@@ -14,7 +14,7 @@ import LangToggle from '@/components/LangToggle';
 import { useTranslation } from '@/i18n';
 import { getAppRuntimeMode, LOCAL_FORK_RPC_URL } from '@/lib/chains';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
-import type { EarnVault } from '@/types';
+import type { EarnVault, RecallActionData } from '@/types';
 
 type Tab = 'chat' | 'explore' | 'portfolio' | 'settings';
 
@@ -25,6 +25,8 @@ export default function PageApp() {
   const { isConnected, address } = useAccount();
   const { currentWallets, currentAgentCaps } = useSafeFlowResources();
   const [faucetState, setFaucetState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [pendingChatMessage, setPendingChatMessage] = useState<string>('');
+  const [pendingRecallData, setPendingRecallData] = useState<RecallActionData | undefined>();
   const runtimeMode = getAppRuntimeMode();
   const needsWalletSetup = isConnected && currentWallets.length === 0;
   const needsCapSetup = isConnected && currentWallets.length > 0 && currentAgentCaps.length === 0;
@@ -243,7 +245,12 @@ export default function PageApp() {
 
         {activeTab === 'chat' && (
           <div className="max-w-4xl mx-auto w-full animate-fade-in-up">
-            <ChatAgent onSelectVault={handleSelectVault} />
+            <ChatAgent
+              onSelectVault={handleSelectVault}
+              initialMessage={pendingChatMessage}
+              initialRecallData={pendingRecallData}
+              onInitialMessageConsumed={() => { setPendingChatMessage(''); setPendingRecallData(undefined); }}
+            />
           </div>
         )}
 
@@ -267,7 +274,15 @@ export default function PageApp() {
                 {t('portfolio.subtitle')}
               </p>
             </div>
-            <Portfolio onOpenExplore={() => setActiveTab('explore')} onOpenSettings={() => setActiveTab('settings')} onOpenChat={() => setActiveTab('chat')} />
+            <Portfolio
+              onOpenExplore={() => setActiveTab('explore')}
+              onOpenSettings={() => setActiveTab('settings')}
+              onOpenChat={(msg, recallData) => {
+                setPendingChatMessage(msg);
+                setPendingRecallData(recallData);
+                setActiveTab('chat');
+              }}
+            />
           </div>
         )}
 

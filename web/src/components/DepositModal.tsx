@@ -581,6 +581,8 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
           decimals: tokenDecimals,
           walletId: String(walletId),
           tokenAddress: underlyingToken.address,
+          vaultAddress: vault.address,
+          capId: String(capId),
         }),
       });
       const auditData = await auditRes.json().catch(() => null) as { entry?: { id: string } } | null;

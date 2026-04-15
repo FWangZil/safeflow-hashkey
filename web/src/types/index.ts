@@ -89,6 +89,21 @@ export interface AuditRecord {
   status: 'pending' | 'executed' | 'failed';
 }
 
+/** Structured data for the 2-step recall flow (DeFi vault → SafeFlow → EOA) */
+export interface RecallActionData {
+  walletId: string;
+  capId?: string;
+  tokenAddress: string;
+  /** ERC4626 vault contract that holds the share tokens */
+  vaultAddress?: string;
+  symbol: string;
+  decimals: number;
+  amountWei: string;
+  chainId: number;
+  /** All audit entry IDs for this walletId:tokenAddress pair — patched to 'withdrawn' after step2 */
+  auditEntryIds?: string[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -98,10 +113,11 @@ export interface ChatMessage {
   retryText?: string;
   retryUserMsgId?: string;
   action?: {
-    type: 'deposit' | 'withdraw' | 'info';
+    type: 'deposit' | 'withdraw' | 'info' | 'recall';
     vault?: EarnVault;
     amount?: string;
     token?: string;
+    recallData?: RecallActionData;
   };
 }
 

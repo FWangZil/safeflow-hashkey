@@ -5,17 +5,21 @@ import { useAccount } from 'wagmi';
 import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMessage, EarnVault } from '@/types';
+import type { ChatMessage, EarnVault, RecallActionData } from '@/types';
 import { formatApy, formatTvl } from '@/lib/earn-api';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
+import RecallActionCard from '@/components/RecallActionCard';
 
 interface ChatAgentProps {
   onSelectVault?: (vault: EarnVault) => void;
   onOpenSettings?: () => void;
+  initialMessage?: string;
+  initialRecallData?: RecallActionData;
+  onInitialMessageConsumed?: () => void;
 }
 
-export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentProps) {
+export default function ChatAgent({ onSelectVault, onOpenSettings, initialMessage, initialRecallData, onInitialMessageConsumed }: ChatAgentProps) {
   const { t } = useTranslation();
   const { isConnected } = useAccount();
   const { currentWallets, currentAgentCaps, isHydrated } = useSafeFlowResources();
@@ -38,6 +42,19 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-send when triggered from Portfolio "Ask AI to Recall"
+  const lastInitialMessage = useRef<string>('');
+  const pendingRecallRef = useRef<RecallActionData | undefined>();
+  useEffect(() => {
+    if (!initialMessage || initialMessage === lastInitialMessage.current) return;
+    lastInitialMessage.current = initialMessage;
+    onInitialMessageConsumed?.();
+    // Store recall data — will be attached to the assistant reply, not injected immediately
+    pendingRecallRef.current = initialRecallData;
+    sendMessage(initialMessage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMessage, initialRecallData]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -70,13 +87,19 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
         if (!res.ok) throw new Error(`API error: ${res.status}`);
         const data = await res.json() as Pick<ChatMessage, 'content' | 'vaults' | 'action'> & { message: string };
 
+        // Consume pending recall data and attach it to this assistant message
+        const recallData = pendingRecallRef.current;
+        pendingRecallRef.current = undefined;
+
         const assistantMsg: ChatMessage = {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
           content: data.message,
           timestamp: Date.now(),
           vaults: data.vaults,
-          action: data.action,
+          action: recallData
+            ? { type: 'recall', recallData }
+            : data.action,
         };
         setMessages(prev => [...prev, assistantMsg]);
         setIsLoading(false);
@@ -298,6 +321,11 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {/* Recall action card */}
+                  {msg.action?.type === 'recall' && msg.action.recallData && (
+                    <RecallActionCard {...msg.action.recallData} />
                   )}
 
                   <div className="text-[10px] text-muted-foreground/40 px-1 font-data">

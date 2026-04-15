@@ -5,13 +5,14 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { BarChart3, Loader2, Wallet, RefreshCw, Coins, ArrowDownToLine } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
+import type { RecallActionData } from '@/types';
 import { LOCAL_FORK_ENABLED, LOCAL_FORK_CHAIN_ID, LOCAL_FORK_NAME } from '@/lib/chains';
 import { SAFEFLOW_VAULT_ABI, getSafeFlowAddress } from '@/lib/contracts';
 
 interface PortfolioProps {
   onOpenExplore?: () => void;
   onOpenSettings?: () => void;
-  onOpenChat?: () => void;
+  onOpenChat?: (message: string, recallData?: RecallActionData) => void;
 }
 
 interface PortfolioPosition {
@@ -51,12 +52,14 @@ interface AuditEntry {
   vaultName: string;
   token: string;
   amount: string;
-  status: 'pending' | 'executed' | 'failed';
+  status: 'pending' | 'executed' | 'failed' | 'withdrawn';
   txHash?: string;
   chainId?: number;
   decimals?: number;
   walletId?: string;
   tokenAddress?: string;
+  vaultAddress?: string;
+  capId?: string;
   timestamp: number;
 }
 
@@ -74,14 +77,12 @@ function formatAuditAmount(amountWei: string, decimals: number): string {
   }
 }
 
-const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'DAI', 'BUSD', 'FRAX', 'LUSD', 'USDBC']);
-
-/** Returns a numeric USD string (e.g. "20.00") for stablecoins, or null for non-stablecoins */
-function estimateUsd(nativeAmount: string, symbol: string): string | null {
-  if (!STABLECOIN_SYMBOLS.has(symbol.toUpperCase())) return null;
+/** Compute USD value from token amount and price. Returns formatted string or null. */
+function computeUsd(nativeAmount: string, priceUsd: number | undefined): string | null {
+  if (priceUsd == null) return null;
   const n = parseFloat(nativeAmount);
-  if (isNaN(n)) return null;
-  return n.toFixed(2);
+  if (isNaN(n) || n === 0) return '0.00';
+  return (n * priceUsd).toFixed(2);
 }
 
 // ── Per-wallet live balance row ───────────────────────────────────────────────
@@ -93,10 +94,14 @@ interface WalletBalanceRowProps {
   chainId: number;
   /** Total amount ever deposited into DeFi (wei), from audit trail */
   depositedAmountRaw: bigint;
-  onOpenChat?: () => void;
+  /** USD price per 1 token, from Binance */
+  priceUsd?: number;
+  /** Most-recent DeFi vault name this pair was deployed into */
+  vaultName?: string;
+  onOpenChat?: (message: string) => void;
 }
 
-function WalletBalanceRow({ walletId, tokenAddress, symbol, decimals, chainId, depositedAmountRaw, onOpenChat }: WalletBalanceRowProps) {
+function WalletBalanceRow({ walletId, tokenAddress, symbol, decimals, chainId, depositedAmountRaw, priceUsd, vaultName, onOpenChat }: WalletBalanceRowProps) {
   const safeFlowAddress = getSafeFlowAddress();
   const { writeContractAsync } = useWriteContract();
   const [withdrawTx, setWithdrawTx] = useState<`0x${string}` | undefined>();
@@ -174,27 +179,39 @@ function WalletBalanceRow({ walletId, tokenAddress, symbol, decimals, chainId, d
         {isDeployed ? (
           <div className="space-y-0.5">
             <div className="text-muted-foreground/50 text-[10px] line-through">{displayDeposited} {symbol}</div>
-            <div className="text-amber-400 text-[10px] font-semibold">0 in SafeFlow</div>
+            <div className="dark:text-amber-400 text-amber-700 text-[10px] font-semibold">0 in SafeFlow</div>
           </div>
         ) : (
           <span className="font-semibold">{displayBalance} {symbol}</span>
         )}
       </td>
       <td className="px-4 py-3 text-right font-data font-semibold">
-        {isDeployed
-          ? <span className="text-muted-foreground">—</span>
-          : (() => { const usd = estimateUsd(displayBalance, symbol); return usd ? `≈ $${usd}` : <span className="text-muted-foreground">—</span>; })()
-        }
+        {(() => {
+          const amount = isDeployed ? displayDeposited : displayBalance;
+          const usd = computeUsd(amount, priceUsd);
+          if (!usd) return <span className="text-muted-foreground text-xs">fetching…</span>;
+          return (
+            <span className={isDeployed ? 'dark:text-amber-400 text-amber-700' : undefined}>
+              ≈ ${usd}
+              {isDeployed && <span className="text-[9px] dark:text-amber-400/60 text-amber-600 ml-1">in vault</span>}
+            </span>
+          );
+        })()}
       </td>
       <td className="px-4 py-3 text-right">
         {txError && <div className="text-destructive text-[10px] mb-1">{txError}</div>}
         {isDeployed ? (
           <div className="flex flex-col items-end gap-1">
-            <div className="text-[10px] text-amber-400/80 font-medium">Deployed to DeFi vault</div>
+            <div className="text-[10px] dark:text-amber-400/80 text-amber-700 font-medium">Deployed to DeFi vault</div>
             {onOpenChat ? (
               <button
-                onClick={onOpenChat}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-400/20 text-amber-300 text-[10px] font-semibold hover:bg-amber-500/20 transition-colors"
+                onClick={() => onOpenChat(
+                  `Recall my ${displayDeposited} ${symbol} from the ${
+                    vaultName || 'DeFi vault'
+                  } back into SafeFlow Wallet #${walletId} (token ${tokenAddress}). ` +
+                  `Use executeCall() to withdraw from the vault and credit the balance back.`
+                )}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg dark:bg-amber-500/10 bg-amber-100 dark:border-amber-400/20 border-amber-400/40 dark:text-amber-300 text-amber-800 text-[10px] font-semibold hover:bg-amber-500/20 transition-colors"
               >
                 <ArrowDownToLine className="w-2.5 h-2.5" />
                 Ask AI to Recall
@@ -230,6 +247,7 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
   const [totalUsd, setTotalUsd] = useState(0);
   const hasReadyResources = currentWallets.length > 0 && currentAgentCaps.length > 0;
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
 
   const fetchPositions = useCallback(async () => {
     if (!address) return;
@@ -243,12 +261,23 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
         const data = await res.json() as { entries?: AuditEntry[] };
         const entries: AuditEntry[] = data.entries || [];
         const executed = entries.filter(
-          (e) => e.status === 'executed' && e.agentAddress?.toLowerCase() === address.toLowerCase()
+          (e) => (e.status === 'executed') && e.agentAddress?.toLowerCase() === address.toLowerCase()
         );
         setAuditEntries(executed);
+
+        // Fetch real token prices from Binance via our proxy
+        const symbols = [...new Set(executed.map((e) => e.token.toUpperCase()))].filter(Boolean);
+        let prices: Record<string, number> = {};
+        try {
+          const priceRes = await fetch(`/api/prices?symbols=${symbols.join(',')}`);
+          if (priceRes.ok) prices = await priceRes.json() as Record<string, number>;
+        } catch { /* non-blocking */ }
+        setTokenPrices(prices);
+
         const pos: PortfolioPosition[] = executed.map((e) => {
           const dec = e.decimals ?? 18;
           const native = formatAuditAmount(e.amount, dec);
+          const priceUsd = prices[e.token.toUpperCase()];
           return {
             chainId: e.chainId ?? LOCAL_FORK_CHAIN_ID,
             protocolName: e.vaultName || e.vault || 'SafeFlow',
@@ -258,7 +287,7 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
               symbol: e.token,
               decimals: dec,
             },
-            balanceUsd: estimateUsd(native, e.token) ?? '0',
+            balanceUsd: computeUsd(native, priceUsd) ?? '0',
             balanceNative: `${native} ${e.token}`,
             vaultAddress: e.vault,
             vaultName: e.vaultName,
@@ -292,6 +321,9 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
   useEffect(() => {
     if (isConnected && address) {
       fetchPositions();
+      // Poll every 15s so Portfolio auto-refreshes after entries are marked withdrawn
+      const id = setInterval(() => fetchPositions(), 15_000);
+      return () => clearInterval(id);
     }
   }, [address, fetchPositions, isConnected]);
 
@@ -312,7 +344,7 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
         <div className="p-4 bg-card/60 border border-border rounded-xl glow-border flex-1 mr-3">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Total Value</div>
           <div className="text-2xl font-bold font-data mt-1">
-            {loading ? '...' : LOCAL_FORK_ENABLED ? `${positions.length} deposit${positions.length !== 1 ? 's' : ''}` : `$${totalUsd.toFixed(2)}`}
+            {loading ? '…' : `$${totalUsd.toFixed(2)}`}
           </div>
           <div className="text-[11px] text-muted-foreground mt-0.5 font-data">
             {positions.length} position{positions.length !== 1 ? 's' : ''}
@@ -428,13 +460,21 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
       {/* SafeFlow Wallet Balances — live on-chain reads (local fork only) */}
       {LOCAL_FORK_ENABLED && auditEntries.some(e => e.walletId && e.tokenAddress) && (() => {
         const seen = new Set<string>();
-        // Aggregate total deposited per (walletId, tokenAddress) pair
+        // Aggregate total deposited per (walletId, tokenAddress) pair — skip withdrawn entries
         const depositedTotals = new Map<string, bigint>();
+        const auditIdsByPair = new Map<string, string[]>();
+        const vaultNamesMap = new Map<string, string>();
+        const vaultAddressMap = new Map<string, string>();
+        const capIdMap = new Map<string, string>();
         for (const e of auditEntries) {
           if (!e.walletId || !e.tokenAddress) continue;
           const key = `${e.walletId}:${e.tokenAddress}`;
           const prev = depositedTotals.get(key) ?? BigInt(0);
           try { depositedTotals.set(key, prev + BigInt(e.amount)); } catch { /* ignore */ }
+          auditIdsByPair.set(key, [...(auditIdsByPair.get(key) ?? []), e.id]);
+          if (e.vaultName && !vaultNamesMap.has(key)) vaultNamesMap.set(key, e.vaultName);
+          if (e.vaultAddress && !vaultAddressMap.has(key)) vaultAddressMap.set(key, e.vaultAddress);
+          if (e.capId && !capIdMap.has(key)) capIdMap.set(key, e.capId);
         }
         const pairs = auditEntries
           .filter(e => e.walletId && e.tokenAddress)
@@ -443,7 +483,9 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
-          });
+          })
+          // Hide rows where all deposits have been withdrawn (depositedTotal == 0 after filtering)
+          .filter(e => (depositedTotals.get(`${e.walletId}:${e.tokenAddress}`) ?? BigInt(0)) > BigInt(0));
         return (
           <div className="border border-primary/20 rounded-xl overflow-hidden">
             <div className="px-4 py-2.5 bg-primary/5 border-b border-primary/20 text-[11px] text-primary font-semibold uppercase tracking-wider flex items-center gap-2">
@@ -471,7 +513,23 @@ export default function Portfolio({ onOpenExplore, onOpenSettings, onOpenChat }:
                     decimals={e.decimals ?? 18}
                     chainId={e.chainId ?? LOCAL_FORK_CHAIN_ID}
                     depositedAmountRaw={depositedTotals.get(`${e.walletId}:${e.tokenAddress}`) ?? BigInt(0)}
-                    onOpenChat={onOpenChat}
+                    priceUsd={tokenPrices[e.token.toUpperCase()]}
+                    vaultName={vaultNamesMap.get(`${e.walletId}:${e.tokenAddress}`)}
+                    onOpenChat={onOpenChat ? (msg) => {
+                      const key = `${e.walletId}:${e.tokenAddress}`;
+                      const recallData: RecallActionData = {
+                        walletId: e.walletId!,
+                        capId: capIdMap.get(key),
+                        tokenAddress: e.tokenAddress!,
+                        vaultAddress: vaultAddressMap.get(key),
+                        symbol: e.token,
+                        decimals: e.decimals ?? 18,
+                        amountWei: (depositedTotals.get(key) ?? BigInt(0)).toString(),
+                        chainId: e.chainId ?? LOCAL_FORK_CHAIN_ID,
+                        auditEntryIds: auditIdsByPair.get(key),
+                      };
+                      onOpenChat(msg, recallData);
+                    } : undefined}
                   />
                 ))}
               </tbody>
