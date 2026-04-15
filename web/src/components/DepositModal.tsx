@@ -60,6 +60,8 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
   const [amount, setAmount] = useState('');
   const [walletId, setWalletId] = useState('');
   const [capId, setCapId] = useState('');
+  const [showCustomCapInput, setShowCustomCapInput] = useState(false);
+  const [showCustomWalletInput, setShowCustomWalletInput] = useState(false);
   const [step, setStep] = useState<DepositStep>('input');
   const [quote, setQuote] = useState<ComposerQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -600,13 +602,54 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
                     <label className="block text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium">
                       {t('vaultModal.capIdLabel')}
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={capId}
-                      onChange={e => setCapId(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40 mb-1"
-                    />
+                    {currentAgentCaps.length > 0 && !showCustomCapInput ? (
+                      <select
+                        value={capId}
+                        onChange={e => {
+                          if (e.target.value === '__custom__') {
+                            setShowCustomCapInput(true);
+                            setCapId('');
+                          } else {
+                            const selected = currentAgentCaps.find(c => c.capId === e.target.value);
+                            setCapId(e.target.value);
+                            if (selected) setWalletId(selected.walletId);
+                            setError(null);
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40 mb-1 cursor-pointer"
+                      >
+                        <option value="" disabled>{t('vaultModal.selectCapPlaceholder')}</option>
+                        {currentAgentCaps.map(cap => {
+                          const status = getCapStatus(cap);
+                          return (
+                            <option key={cap.capId} value={cap.capId}>
+                              {status === 'ready' ? '✓' : '✗'} Cap #{cap.capId} · Wallet #{cap.walletId}
+                            </option>
+                          );
+                        })}
+                        <option value="__custom__">{t('vaultModal.capSelectCustom')}</option>
+                      </select>
+                    ) : (
+                      <div className="flex gap-2 mb-1">
+                        <input
+                          type="number"
+                          min="0"
+                          value={capId}
+                          onChange={e => setCapId(e.target.value)}
+                          placeholder="Cap ID"
+                          className="flex-1 px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        />
+                        {currentAgentCaps.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomCapInput(false)}
+                            className="px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground border border-border rounded-xl transition-colors whitespace-nowrap"
+                          >
+                            {t('vaultModal.backToCapList')}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground/70">
                       {t('vaultModal.capIdHint')}
                     </p>
@@ -614,13 +657,48 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
                     <label className="block text-[11px] text-muted-foreground mb-1 uppercase tracking-wider font-medium">
                       {t('vaultModal.walletIdLabel')}
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={walletId}
-                      onChange={e => setWalletId(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40 mb-1"
-                    />
+                    {currentWallets.length > 0 && !showCustomWalletInput ? (
+                      <select
+                        value={walletId}
+                        onChange={e => {
+                          if (e.target.value === '__custom__') {
+                            setShowCustomWalletInput(true);
+                            setWalletId('');
+                          } else {
+                            setWalletId(e.target.value);
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40 mb-1 cursor-pointer"
+                      >
+                        <option value="" disabled>{t('vaultModal.selectWalletPlaceholder')}</option>
+                        {currentWallets.map(wallet => (
+                          <option key={wallet.walletId} value={wallet.walletId}>
+                            Wallet #{wallet.walletId}
+                          </option>
+                        ))}
+                        <option value="__custom__">{t('vaultModal.walletSelectCustom')}</option>
+                      </select>
+                    ) : (
+                      <div className="flex gap-2 mb-1">
+                        <input
+                          type="number"
+                          min="0"
+                          value={walletId}
+                          onChange={e => setWalletId(e.target.value)}
+                          placeholder="Wallet ID"
+                          className="flex-1 px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-data focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        />
+                        {currentWallets.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomWalletInput(false)}
+                            className="px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground border border-border rounded-xl transition-colors whitespace-nowrap"
+                          >
+                            {t('vaultModal.backToWalletList')}
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground/70">
                       {t('vaultModal.walletIdHint')}
                     </p>
