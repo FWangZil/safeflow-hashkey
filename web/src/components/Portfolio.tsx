@@ -75,11 +75,12 @@ function formatAuditAmount(amountWei: string, decimals: number): string {
 
 const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'DAI', 'BUSD', 'FRAX', 'LUSD', 'USDBC']);
 
+/** Returns a numeric USD string (e.g. "20.00") for stablecoins, or null for non-stablecoins */
 function estimateUsd(nativeAmount: string, symbol: string): string | null {
   if (!STABLECOIN_SYMBOLS.has(symbol.toUpperCase())) return null;
   const n = parseFloat(nativeAmount);
   if (isNaN(n)) return null;
-  return `≈ $${n.toFixed(2)}`;
+  return n.toFixed(2);
 }
 
 // ── Per-wallet live balance row ───────────────────────────────────────────────
@@ -141,7 +142,7 @@ function WalletBalanceRow({ walletId, tokenAddress, symbol, decimals, chainId }:
     }
   };
 
-  if (balance === BigInt(0) && !withdrawing) return null;
+  const isDeployed = balance === BigInt(0);
 
   return (
     <tr className="border-b border-border/50 last:border-0 hover:bg-primary/[0.03] transition-colors">
@@ -160,20 +161,30 @@ function WalletBalanceRow({ walletId, tokenAddress, symbol, decimals, chainId }:
           {LOCAL_FORK_NAME}
         </span>
       </td>
-      <td className="px-4 py-3 text-right font-data text-xs">{displayBalance} {symbol}</td>
+      <td className="px-4 py-3 text-right font-data text-xs">
+        {isDeployed
+          ? <span className="text-muted-foreground/60 italic text-[10px]">deployed to vault</span>
+          : `${displayBalance} ${symbol}`}
+      </td>
       <td className="px-4 py-3 text-right font-data font-semibold">
-        {estimateUsd(displayBalance, symbol) ?? <span className="text-muted-foreground">—</span>}
+        {isDeployed
+          ? <span className="text-muted-foreground">—</span>
+          : (() => { const usd = estimateUsd(displayBalance, symbol); return usd ? `≈ $${usd}` : <span className="text-muted-foreground">—</span>; })()}
       </td>
       <td className="px-4 py-3 text-right">
         {txError && <div className="text-destructive text-[10px] mb-1">{txError}</div>}
-        <button
-          onClick={handleWithdrawAll}
-          disabled={withdrawing || balance === BigInt(0)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-[11px] font-semibold hover:bg-primary/20 transition-colors disabled:opacity-50"
-        >
-          {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowDownToLine className="w-3 h-3" />}
-          {withdrawing ? 'Withdrawing…' : 'Withdraw All'}
-        </button>
+        {isDeployed
+          ? <span className="text-[10px] text-muted-foreground/50">in external vault</span>
+          : (
+            <button
+              onClick={handleWithdrawAll}
+              disabled={withdrawing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-[11px] font-semibold hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              {withdrawing ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowDownToLine className="w-3 h-3" />}
+              {withdrawing ? 'Withdrawing…' : 'Withdraw All'}
+            </button>
+          )}
       </td>
     </tr>
   );
@@ -373,7 +384,7 @@ export default function Portfolio({ onOpenExplore, onOpenSettings }: PortfolioPr
                   <td className="px-4 py-3 text-right font-data font-semibold">
                     {LOCAL_FORK_ENABLED
                       ? (pos.balanceUsd && pos.balanceUsd !== '0'
-                          ? `≈ $${parseFloat(pos.balanceUsd).toFixed(2)}`
+                          ? `≈ $${pos.balanceUsd}`
                           : <span className="text-muted-foreground text-xs" title="No price oracle on local fork">—</span>)
                       : `$${parseFloat(pos.balanceUsd || '0').toFixed(2)}`}
                   </td>

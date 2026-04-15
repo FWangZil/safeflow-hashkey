@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
-import { AlertTriangle, BarChart3, Droplets, Globe2, MessageSquare, Settings, Shield, TrendingUp } from 'lucide-react';
+import { AlertTriangle, BarChart3, Droplets, Globe2, MessageSquare, Settings, TrendingUp } from 'lucide-react';
 import VaultExplorer from '@/components/VaultExplorer';
 import ChatAgent from '@/components/ChatAgent';
 import DepositModal from '@/components/DepositModal';
@@ -90,9 +90,11 @@ export default function PageApp() {
           <div className="flex items-center justify-between h-14">
             {/* Logo */}
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-primary/20">
-                <Shield className="w-4 h-4 text-white" />
-              </div>
+              <img
+                src="/logo.png"
+                alt="SafeFlow Logo"
+                className="w-8 h-8 rounded-lg shadow-lg shadow-primary/20 object-contain bg-white"
+              />
               <div className="leading-tight">
                 <h1 className="text-base font-bold tracking-tight">{t('app.title')}</h1>
                 <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">{t('app.subtitle')}</p>

@@ -1,3 +1,5 @@
+<img src="web/public/logo.png" align="right" width="120" alt="SafeFlow Logo" />
+
 # SafeFlow Yield Agent (EVM)
 
 **AI-powered DeFi yield management with on-chain security guardrails**
