@@ -162,7 +162,7 @@ async function fetchAndFilterVaults(params: {
   const res = await fetch(`${EARN_API}/v1/earn/vaults?${qs.toString()}`);
   if (!res.ok) throw new Error(`Earn API: ${res.status}`);
 
-  const json = await res.json();
+  const json = await res.json() as { data?: any[]; [key: string]: any };
   let vaults = json.data || json;
 
   if (params.token) {

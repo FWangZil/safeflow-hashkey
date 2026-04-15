@@ -183,7 +183,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
         cap,
         wallet: currentWallets.find(wallet => wallet.walletId === cap.walletId),
       }))
-      .filter(resource => Boolean(resource.wallet));
+      .filter((resource): resource is { cap: typeof resource.cap; wallet: NonNullable<typeof resource.wallet> } => Boolean(resource.wallet));
 
     return pairedResources.sort((left, right) => {
       if (lastUsed?.capId === left.cap.capId) return -1;
@@ -216,8 +216,11 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
     }
 
     if (suggestedResources.length === 1) {
-      setWalletId(suggestedResources[0].wallet.walletId);
-      setCapId(suggestedResources[0].cap.capId);
+      const first = suggestedResources[0];
+      if (first?.wallet && first?.cap) {
+        setWalletId(first.wallet.walletId);
+        setCapId(first.cap.capId);
+      }
     }
   }, [capId, lastUsed, suggestedResources, walletId]);
 
@@ -448,7 +451,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
         throw new Error(`Deposit quote failed (${res.status}): ${text.slice(0, 200)}`);
       }
 
-      const data = await res.json();
+      const data = await res.json() as import('@/types').ComposerQuote;
       setQuote(data);
 
       // Fetch LI.FI routes in parallel for route display (non-blocking)
@@ -460,7 +463,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
         fromAddress: safeFlowAddress,
         fromAmount: depositFromAmount,
       }).toString()}`)
-        .then(r => r.ok ? r.json() : null)
+        .then(r => r.ok ? r.json() as Promise<{ routes?: LiFiRoute[] }> : null)
         .then(routeData => {
           if (routeData?.routes?.[0]) setRouteInfo(routeData.routes[0]);
         })
@@ -576,7 +579,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
           riskScore: 1,
         }),
       });
-      const auditData = await auditRes.json().catch(() => null);
+      const auditData = await auditRes.json().catch(() => null) as { entry?: { id: string } } | null;
 
       if ((tokenAllowance as bigint | undefined) === undefined || (tokenAllowance as bigint) < amountWei) {
         setProgressLabel('Approving token to SafeFlowVault...');

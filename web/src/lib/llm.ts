@@ -102,12 +102,16 @@ async function callOpenAI(messages: LLMMessage[], cfg: LLMConfig): Promise<LLMRe
     throw new Error(`OpenAI API error ${res.status}: ${text.slice(0, 300)}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+    model?: string;
+    usage?: { prompt_tokens: number; completion_tokens: number };
+  };
   const choice = data.choices?.[0];
 
   return {
     content: choice?.message?.content ?? '',
-    model: data.model,
+    model: data.model ?? '',
     usage: data.usage
       ? {
           inputTokens: data.usage.prompt_tokens,
@@ -156,7 +160,11 @@ async function callAnthropic(messages: LLMMessage[], cfg: LLMConfig): Promise<LL
     throw new Error(`Anthropic API error ${res.status}: ${text.slice(0, 300)}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as {
+    content?: Array<{ type: string; text: string }>;
+    model?: string;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
 
   // Anthropic returns content as an array of blocks
   const textContent = data.content
@@ -166,7 +174,7 @@ async function callAnthropic(messages: LLMMessage[], cfg: LLMConfig): Promise<LL
 
   return {
     content: textContent,
-    model: data.model,
+    model: data.model ?? '',
     usage: data.usage
       ? {
           inputTokens: data.usage.input_tokens,

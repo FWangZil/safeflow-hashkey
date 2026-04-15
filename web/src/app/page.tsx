@@ -49,7 +49,7 @@ export default function Home() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', method, params, id }),
-        }).then(r => r.json());
+        }).then(r => r.json()) as Promise<{ error?: { message: string }; result?: unknown }>;
       await post('anvil_impersonateAccount', [WHALE], 1);
       const txRes = await post('eth_sendTransaction', [{ from: WHALE, to: USDC, data }], 2);
       if (txRes.error) throw new Error(txRes.error.message);

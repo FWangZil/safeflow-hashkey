@@ -68,7 +68,7 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
         });
 
         if (!res.ok) throw new Error(`API error: ${res.status}`);
-        const data = await res.json();
+        const data = await res.json() as Pick<ChatMessage, 'content' | 'vaults' | 'action'> & { message: string };
 
         const assistantMsg: ChatMessage = {
           id: `assistant-${Date.now()}`,

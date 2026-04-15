@@ -41,7 +41,7 @@ export async function getRoutes(params: {
 
   const res = await fetch(`/api/earn/routes?${searchParams.toString()}`);
   if (!res.ok) return [];
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => ({}) as { routes?: LiFiRoute[] }) as { routes?: LiFiRoute[] };
   return data.routes ?? [];
 }
 

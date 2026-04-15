@@ -46,7 +46,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json() as Partial<AuditEntry> & Record<string, unknown>;
 
     const payload = JSON.stringify({
       timestamp: body.timestamp || Date.now(),
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json() as { id: string; txHash?: string; ipfsCid?: string; status?: AuditEntry['status'] };
     const { id, txHash, ipfsCid, status } = body;
 
     const entries = await readEntries();

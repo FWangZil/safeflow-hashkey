@@ -60,7 +60,7 @@ export default function Portfolio({ onOpenExplore, onOpenSettings }: PortfolioPr
         }
         throw new Error(`API error: ${res.status}`);
       }
-      const data = await res.json();
+      const data = await res.json() as PortfolioPosition[] | { positions?: PortfolioPosition[]; data?: PortfolioPosition[] };
       // Handle both array and object response
       const pos: PortfolioPosition[] = Array.isArray(data) ? data : (data.positions || data.data || []);
       setPositions(pos);

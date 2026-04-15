@@ -33,9 +33,9 @@ export async function fetchVaults(filters: VaultFilters = {}): Promise<EarnVault
     throw new Error(`Earn API error: ${res.status} ${res.statusText}`);
   }
 
-  const json = await res.json();
-  let vaults: EarnVault[] = json.data || json;
-  const total = json.total ?? vaults.length;
+  const json = await res.json() as { data?: EarnVault[]; total?: number; hasMore?: boolean } | EarnVault[];
+  let vaults: EarnVault[] = (json as { data?: EarnVault[] }).data || (json as EarnVault[]);
+  const total = (json as { total?: number }).total ?? vaults.length;
 
   // Client-side filtering
   if (filters.onlyTransactional) {
@@ -77,7 +77,7 @@ export async function fetchVaults(filters: VaultFilters = {}): Promise<EarnVault
     });
   }
 
-  return { data: vaults, total, hasMore: json.hasMore ?? false };
+  return { data: vaults, total, hasMore: (json as { hasMore?: boolean }).hasMore ?? false };
 }
 
 export async function fetchPortfolio(walletAddress: string): Promise<PortfolioPosition[]> {
