@@ -31,6 +31,7 @@
     "sessionCapNote": "所有存款均受 SessionCap 支出限额保护",
     "errorPrefix": "抱歉，遇到了一个错误。",
     "errorRetry": "请重试。",
+    "retry": "重试",
     "quickPrompts": {
       "stablecoin": "Base 上最佳稳定币金库",
       "eth": "前 5 个 ETH 收益机会",

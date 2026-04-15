@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAccount } from 'wagmi';
-import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield } from 'lucide-react';import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';import type { ChatMessage, EarnVault } from '@/types';
+import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield, RotateCcw } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { ChatMessage, EarnVault } from '@/types';
 import { formatApy, formatTvl } from '@/lib/earn-api';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
@@ -50,39 +52,52 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
     setInput('');
     setIsLoading(true);
 
-    try {
-      const res = await fetch('/api/agent/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text.trim(), history: messages.slice(-10) }),
-      });
+    const MAX_RETRIES = 3;
+    let lastError: Error | null = null;
 
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        // Exponential backoff: 1s, 2s
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+      try {
+        const res = await fetch('/api/agent/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text.trim(), history: messages.slice(-10) }),
+        });
 
-      const assistantMsg: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: data.message,
-        timestamp: Date.now(),
-        vaults: data.vaults,
-        action: data.action,
-      };
-      setMessages(prev => [...prev, assistantMsg]);
-    } catch (err) {
-      const errorMsg: ChatMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: `${t('chat.errorPrefix')} ${err instanceof Error ? err.message : t('chat.errorRetry')}`,
-        timestamp: Date.now(),
-        retryText: text.trim(),
-        retryUserMsgId: userMsg.id,
-      };
-      setMessages(prev => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
-      inputRef.current?.focus();
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+        const data = await res.json();
+
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: data.message,
+          timestamp: Date.now(),
+          vaults: data.vaults,
+          action: data.action,
+        };
+        setMessages(prev => [...prev, assistantMsg]);
+        setIsLoading(false);
+        inputRef.current?.focus();
+        return;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(t('chat.errorRetry'));
+      }
     }
+
+    const errorMsg: ChatMessage = {
+      id: `error-${Date.now()}`,
+      role: 'assistant',
+      content: `${t('chat.errorPrefix')} ${lastError?.message ?? t('chat.errorRetry')}`,
+      timestamp: Date.now(),
+      retryText: text.trim(),
+      retryUserMsgId: userMsg.id,
+    };
+    setMessages(prev => [...prev, errorMsg]);
+    setIsLoading(false);
+    inputRef.current?.focus();
   }, [isLoading, messages, t]);
 
   const handleSend = () => sendMessage(input);
@@ -192,7 +207,9 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
                     className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                       msg.role === 'user'
                         ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                        : 'bg-secondary/80 rounded-tl-sm'
+                        : msg.retryText
+                          ? 'bg-destructive/10 border border-destructive/20 rounded-tl-sm'
+                          : 'bg-secondary/80 rounded-tl-sm'
                     }`}
                   >
                     {msg.role === 'assistant' ? (
@@ -226,6 +243,19 @@ export default function ChatAgent({ onSelectVault, onOpenSettings }: ChatAgentPr
                       </ReactMarkdown>
                     ) : (
                       <div className="whitespace-pre-wrap">{msg.content}</div>
+                    )}
+                    {msg.retryText && (
+                      <button
+                        onClick={() => {
+                          setMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== msg.retryUserMsgId));
+                          sendMessage(msg.retryText!);
+                        }}
+                        disabled={isLoading}
+                        className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-background/60 px-2.5 py-1 text-[11px] font-semibold text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        {t('chat.retry')}
+                      </button>
                     )}
                   </div>
 

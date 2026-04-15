@@ -31,6 +31,7 @@
     "sessionCapNote": "All deposits protected by SessionCap spending limits",
     "errorPrefix": "Sorry, I encountered an error.",
     "errorRetry": "Please try again.",
+    "retry": "Retry",
     "quickPrompts": {
       "stablecoin": "Best stablecoin vaults on Base",
       "eth": "Top 5 ETH yield opportunities",
