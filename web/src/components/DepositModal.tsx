@@ -11,6 +11,7 @@ import { ERC20_ABI, getSafeFlowAddress, SAFEFLOW_VAULT_ABI } from '@/lib/contrac
 import { useSwitchOrAddChain } from '@/lib/useSwitchOrAddChain';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
+import type { LiFiRoute } from '@/lib/composer';
 
 interface DepositModalProps {
   vault: EarnVault;
@@ -64,6 +65,7 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
   const [showCustomWalletInput, setShowCustomWalletInput] = useState(false);
   const [step, setStep] = useState<DepositStep>('input');
   const [quote, setQuote] = useState<ComposerQuote | null>(null);
+  const [routeInfo, setRouteInfo] = useState<LiFiRoute | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progressLabel, setProgressLabel] = useState('');
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
@@ -236,6 +238,22 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
 
       const data = await res.json();
       setQuote(data);
+
+      // Fetch LI.FI routes in parallel for route display (non-blocking)
+      fetch(`/api/earn/routes?${new URLSearchParams({
+        fromChainId: String(vault.chainId),
+        toChainId: String(vault.chainId),
+        fromTokenAddress: underlyingToken.address,
+        toTokenAddress: vault.address,
+        fromAddress: safeFlowAddress,
+        fromAmount: params.get('fromAmount') ?? fromAmount,
+      }).toString()}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(routeData => {
+          if (routeData?.routes?.[0]) setRouteInfo(routeData.routes[0]);
+        })
+        .catch(() => null);
+
       setStep('confirm');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get quote');
@@ -830,9 +848,29 @@ export default function DepositModal({ vault, onClose, onOpenSettings }: Deposit
                       <span className="font-data">{executionChainName}</span>
                     </div>
                   </div>
+
+                  {/* LI.FI Route info */}
+                  {routeInfo && routeInfo.steps.length > 0 && (
+                    <div className="p-3 bg-primary/5 border border-primary/15 rounded-xl space-y-1.5">
+                      <div className="text-[10px] uppercase tracking-[0.14em] font-semibold text-muted-foreground mb-2">
+                        LI.FI Route
+                      </div>
+                      {routeInfo.steps.map((step, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground capitalize">{step.type}</span>
+                          <span className="font-semibold font-data text-primary">
+                            via {step.toolDetails?.name ?? step.tool}
+                          </span>
+                        </div>
+                      ))}
+                      {routeInfo.tags?.includes('RECOMMENDED') && (
+                        <div className="text-[10px] text-primary/70 font-medium mt-1">✓ Recommended route</div>
+                      )}
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button
-                      onClick={() => { setStep('input'); setQuote(null); }}
+                      onClick={() => { setStep('input'); setQuote(null); setRouteInfo(null); }}
                       className="flex-1 px-4 py-3 border border-border rounded-xl text-sm font-semibold hover:bg-secondary transition-colors"
                     >
                       Back

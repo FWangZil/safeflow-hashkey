@@ -2,6 +2,49 @@ import type { ComposerQuote } from '@/types';
 
 const COMPOSER_API_BASE = 'https://li.quest';
 
+export interface LiFiRouteStep {
+  type: string;
+  tool: string;
+  toolDetails?: { name: string; logoURI?: string; key?: string };
+  action?: {
+    fromToken: { symbol: string; address: string };
+    toToken: { symbol: string; address: string };
+    fromAmount: string;
+    toAmount?: string;
+  };
+  estimate?: { toAmount?: string; gasCosts?: { amountUSD?: string }[] };
+}
+
+export interface LiFiRoute {
+  id: string;
+  steps: LiFiRouteStep[];
+  gasCostUSD?: string;
+  tags?: string[];
+}
+
+export async function getRoutes(params: {
+  fromChainId: number;
+  toChainId: number;
+  fromTokenAddress: string;
+  toTokenAddress: string;
+  fromAddress: string;
+  fromAmount: string;
+}): Promise<LiFiRoute[]> {
+  const searchParams = new URLSearchParams({
+    fromChainId: String(params.fromChainId),
+    toChainId: String(params.toChainId),
+    fromTokenAddress: params.fromTokenAddress,
+    toTokenAddress: params.toTokenAddress,
+    fromAddress: params.fromAddress,
+    fromAmount: params.fromAmount,
+  });
+
+  const res = await fetch(`/api/earn/routes?${searchParams.toString()}`);
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => ({}));
+  return data.routes ?? [];
+}
+
 export interface QuoteParams {
   fromChain: number;
   toChain: number;
