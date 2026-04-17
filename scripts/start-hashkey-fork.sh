@@ -39,6 +39,9 @@ HASHKEY_FORK_PORT="${HASHKEY_FORK_PORT:-8546}"
 HASHKEY_FORK_CHAIN_ID="${NEXT_PUBLIC_HASHKEY_LOCAL_FORK_CHAIN_ID:-31338}"
 ANVIL_BLOCK_TIME="${ANVIL_BLOCK_TIME:-2}"
 STATE_FILE="${ROOT_DIR}/.hashkey-fork-state.json"
+ANVIL_LOG_FILE="${ANVIL_LOG_FILE:-${ROOT_DIR}/.hashkey-fork-anvil.log}"
+# Verbosity for anvil: 0=quiet, 1=-v (calls), 2=-vv, 3=-vvv (traces+revert reason), 4=-vvvv
+ANVIL_VERBOSITY="${ANVIL_VERBOSITY:-3}"
 
 LOCAL_RPC="http://127.0.0.1:${HASHKEY_FORK_PORT}"
 
@@ -81,8 +84,14 @@ ANVIL_ARGS=(
   --chain-id "${HASHKEY_FORK_CHAIN_ID}"
   --block-time "${ANVIL_BLOCK_TIME}"
   --state "${STATE_FILE}"
-  --silent
 )
+
+# Add verbosity flag (-v / -vv / -vvv / -vvvv) so transaction traces & revert
+# reasons surface in the anvil log. Set ANVIL_VERBOSITY=0 to suppress.
+if [ "${ANVIL_VERBOSITY}" -gt 0 ] 2>/dev/null; then
+  V_FLAG="-$(printf 'v%.0s' $(seq 1 "${ANVIL_VERBOSITY}"))"
+  ANVIL_ARGS+=("${V_FLAG}")
+fi
 
 if [ "$NEED_DEPLOY" = true ]; then
   # Fresh fork from remote — state file will be created on exit
@@ -90,7 +99,12 @@ if [ "$NEED_DEPLOY" = true ]; then
 fi
 # If resuming: no --fork-url needed, anvil loads from --state file
 
-anvil "${ANVIL_ARGS[@]}" &
+# Tee anvil output to both terminal (for live debugging) and a log file so
+# failures like reverts / invalid opcodes can be inspected after the fact.
+: > "${ANVIL_LOG_FILE}"
+echo "  anvil log   : ${ANVIL_LOG_FILE}"
+# Use process substitution so ${ANVIL_PID} refers to anvil itself (not `tee`).
+anvil "${ANVIL_ARGS[@]}" > >(tee "${ANVIL_LOG_FILE}") 2>&1 &
 ANVIL_PID=$!
 echo "  anvil PID: ${ANVIL_PID}"
 

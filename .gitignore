@@ -41,6 +41,7 @@ docs/deployments/
 
 # Anvil state persistence
 .hashkey-fork-state.json
+.hashkey-fork-anvil.log
 
 # Misc
 *.tsbuildinfo

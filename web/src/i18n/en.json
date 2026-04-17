@@ -147,6 +147,8 @@
     "walletNamePlaceholder": "e.g. My DeFi Wallet",
     "walletCreated": "Wallet created and added to your saved resources.",
     "txFailed": "Transaction failed. Check your chain, gas and contract configuration, then try again.",
+    "txReverted": "Transaction reverted on-chain. Check anvil logs for the revert reason.",
+    "wrongChain": "Wrong network. Please switch your wallet to the target chain.",
     "createCapDescription": "Create a SessionCap for an agent address. If you already know a wallet ID, you can use it here without leaving the page.",
     "useConnectedWallet": "Use connected wallet",
     "rawUnitsHint": "Use raw token units. For USDC, 1 token = 1000000.",

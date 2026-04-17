@@ -147,6 +147,8 @@
     "walletNamePlaceholder": "例如：我的 DeFi 钱包",
     "walletCreated": "Wallet 已创建，并已加入本地资源库。",
     "txFailed": "交易失败。请检查当前链、gas 和合约配置后重试。",
+    "txReverted": "链上交易已回滚（reverted）。请查看 anvil 日志获取具体原因。",
+    "wrongChain": "网络不匹配。请在钱包中切换到目标链。",
     "createCapDescription": "为某个代理地址创建 SessionCap。如果你已经知道 wallet ID，可以直接在这里使用，不必离开页面。",
     "useConnectedWallet": "使用当前钱包",
     "rawUnitsHint": "请使用代币原始单位。以 USDC 为例，1 个代币 = 1000000。",

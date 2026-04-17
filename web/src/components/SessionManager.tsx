@@ -111,11 +111,18 @@ export default function SessionManager() {
 
   const [walletName, setWalletName] = useState('');
   const [walletStep, setWalletStep] = useState<Step>('idle');
+  const [walletError, setWalletError] = useState<string | null>(null);
   const { writeContractAsync } = useWriteContract();
   const [walletTxHash, setWalletTxHash] = useState<`0x${string}` | undefined>();
-  const { data: walletReceipt, isSuccess: walletTxSuccess } = useWaitForTransactionReceipt({ hash: walletTxHash, chainId: contractChainId });
+  const {
+    data: walletReceipt,
+    isSuccess: walletTxSuccess,
+    isError: walletTxIsError,
+    error: walletTxError,
+  } = useWaitForTransactionReceipt({ hash: walletTxHash, chainId: contractChainId });
 
   const [capStep, setCapStep] = useState<Step>('idle');
+  const [capError, setCapError] = useState<string | null>(null);
   const [capForm, setCapForm] = useState({
     walletId: '0',
     agentAddress: '',
@@ -126,12 +133,23 @@ export default function SessionManager() {
     name: '',
   });
   const [capTxHash, setCapTxHash] = useState<`0x${string}` | undefined>();
-  const { data: capReceipt, isSuccess: capTxSuccess } = useWaitForTransactionReceipt({ hash: capTxHash, chainId: contractChainId });
+  const {
+    data: capReceipt,
+    isSuccess: capTxSuccess,
+    isError: capTxIsError,
+    error: capTxError,
+  } = useWaitForTransactionReceipt({ hash: capTxHash, chainId: contractChainId });
 
   const [revokeCapId, setRevokeCapId] = useState('');
   const [revokeStep, setRevokeStep] = useState<Step>('idle');
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const [revokeTxHash, setRevokeTxHash] = useState<`0x${string}` | undefined>();
-  const { isSuccess: revokeTxSuccess } = useWaitForTransactionReceipt({ hash: revokeTxHash, chainId: contractChainId });
+  const {
+    data: revokeReceipt,
+    isSuccess: revokeTxSuccess,
+    isError: revokeTxIsError,
+    error: revokeTxError,
+  } = useWaitForTransactionReceipt({ hash: revokeTxHash, chainId: contractChainId });
 
   const [queryCapId, setQueryCapId] = useState('');
   const [queryEnabled, setQueryEnabled] = useState(false);
@@ -175,7 +193,19 @@ export default function SessionManager() {
   }, [capForm.walletId, currentWallets]);
 
   useEffect(() => {
-    if (!walletTxSuccess || walletStep !== 'pending' || !walletReceipt || !address) return;
+    if (walletStep !== 'pending') return;
+    if (walletTxIsError && walletTxError) {
+      console.error('[SessionManager] wallet receipt error:', walletTxError);
+      setWalletError(walletTxError.message || t('settings.txFailed'));
+      setWalletStep('error');
+      return;
+    }
+    if (walletReceipt && walletReceipt.status === 'reverted') {
+      setWalletError(t('settings.txReverted') || 'Transaction reverted on-chain.');
+      setWalletStep('error');
+      return;
+    }
+    if (!walletTxSuccess || !walletReceipt || !address) return;
 
     setWalletStep('success');
 
@@ -201,10 +231,22 @@ export default function SessionManager() {
         continue;
       }
     }
-  }, [address, contractChainId, upsertWallet, walletReceipt, walletStep, walletTxHash, walletTxSuccess]);
+  }, [address, contractChainId, t, upsertWallet, walletReceipt, walletStep, walletTxError, walletTxHash, walletTxIsError, walletTxSuccess]);
 
   useEffect(() => {
-    if (!capTxSuccess || capStep !== 'pending' || !capReceipt || !address) return;
+    if (capStep !== 'pending') return;
+    if (capTxIsError && capTxError) {
+      console.error('[SessionManager] cap receipt error:', capTxError);
+      setCapError(capTxError.message || t('settings.txFailed'));
+      setCapStep('error');
+      return;
+    }
+    if (capReceipt && capReceipt.status === 'reverted') {
+      setCapError(t('settings.txReverted') || 'Transaction reverted on-chain.');
+      setCapStep('error');
+      return;
+    }
+    if (!capTxSuccess || !capReceipt || !address) return;
 
     setCapStep('success');
 
@@ -240,11 +282,23 @@ export default function SessionManager() {
         continue;
       }
     }
-  }, [address, capForm.expiryHours, capForm.intervalSeconds, capForm.maxPerInterval, capForm.maxTotal, capReceipt, capStep, capTxHash, capTxSuccess, contractChainId, upsertCap]);
+  }, [address, capForm.expiryHours, capForm.intervalSeconds, capForm.maxPerInterval, capForm.maxTotal, capReceipt, capStep, capTxError, capTxHash, capTxIsError, capTxSuccess, contractChainId, t, upsertCap]);
 
   useEffect(() => {
-    if (revokeTxSuccess && revokeStep === 'pending') setRevokeStep('success');
-  }, [revokeStep, revokeTxSuccess]);
+    if (revokeStep !== 'pending') return;
+    if (revokeTxIsError && revokeTxError) {
+      console.error('[SessionManager] revoke receipt error:', revokeTxError);
+      setRevokeError(revokeTxError.message || t('settings.txFailed'));
+      setRevokeStep('error');
+      return;
+    }
+    if (revokeReceipt && revokeReceipt.status === 'reverted') {
+      setRevokeError(t('settings.txReverted') || 'Transaction reverted on-chain.');
+      setRevokeStep('error');
+      return;
+    }
+    if (revokeTxSuccess) setRevokeStep('success');
+  }, [revokeReceipt, revokeStep, revokeTxError, revokeTxIsError, revokeTxSuccess, t]);
 
   useEffect(() => {
     if (!resetFeedbackVisible) return;
@@ -264,8 +318,10 @@ export default function SessionManager() {
   }
 
   const createWallet = async () => {
+    setWalletError(null);
     try {
       if (isWrongExecutionChain || !contractChainId) {
+        setWalletError(t('settings.wrongChain') || 'Wrong network. Please switch to the target chain.');
         setWalletStep('error');
         return;
       }
@@ -280,14 +336,18 @@ export default function SessionManager() {
       });
       setWalletTxHash(hash);
     } catch (error) {
-      console.error(error);
+      console.error('[SessionManager] createWallet failed:', error);
+      const message = error instanceof Error ? (error as { shortMessage?: string }).shortMessage || error.message : String(error);
+      setWalletError(message || t('settings.txFailed'));
       setWalletStep('error');
     }
   };
 
   const createSessionCap = async () => {
+    setCapError(null);
     try {
       if (isWrongExecutionChain || !contractChainId) {
+        setCapError(t('settings.wrongChain') || 'Wrong network. Please switch to the target chain.');
         setCapStep('error');
         return;
       }
@@ -311,14 +371,18 @@ export default function SessionManager() {
       });
       setCapTxHash(hash);
     } catch (error) {
-      console.error(error);
+      console.error('[SessionManager] createSessionCap failed:', error);
+      const message = error instanceof Error ? (error as { shortMessage?: string }).shortMessage || error.message : String(error);
+      setCapError(message || t('settings.txFailed'));
       setCapStep('error');
     }
   };
 
   const revokeSessionCap = async () => {
+    setRevokeError(null);
     try {
       if (isWrongExecutionChain || !contractChainId) {
+        setRevokeError(t('settings.wrongChain') || 'Wrong network. Please switch to the target chain.');
         setRevokeStep('error');
         return;
       }
@@ -333,7 +397,9 @@ export default function SessionManager() {
       });
       setRevokeTxHash(hash);
     } catch (error) {
-      console.error(error);
+      console.error('[SessionManager] revokeSessionCap failed:', error);
+      const message = error instanceof Error ? (error as { shortMessage?: string }).shortMessage || error.message : String(error);
+      setRevokeError(message || t('settings.txFailed'));
       setRevokeStep('error');
     }
   };
@@ -727,7 +793,12 @@ export default function SessionManager() {
                 {walletStep === 'pending' ? <Loader2 className="mx-auto w-4 h-4 animate-spin" /> : t('settings.createWallet')}
               </button>
             )}
-            {walletStep === 'error' && <p className="text-xs text-destructive">{t('settings.txFailed')}</p>}
+            {walletStep === 'error' && (
+              <div className="flex items-start gap-2 rounded-2xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 w-3.5 h-3.5 flex-shrink-0" />
+                <div className="break-words">{walletError || t('settings.txFailed')}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -864,7 +935,12 @@ export default function SessionManager() {
                 {capStep === 'pending' ? <Loader2 className="mx-auto w-4 h-4 animate-spin" /> : t('settings.createSessionCap')}
               </button>
             )}
-            {capStep === 'error' && <p className="text-xs text-destructive">{t('settings.txFailed')}</p>}
+            {capStep === 'error' && (
+              <div className="flex items-start gap-2 rounded-2xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 w-3.5 h-3.5 flex-shrink-0" />
+                <div className="break-words">{capError || t('settings.txFailed')}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -897,7 +973,12 @@ export default function SessionManager() {
                 {revokeStep === 'pending' ? <Loader2 className="mx-auto w-4 h-4 animate-spin" /> : t('settings.revokeButton')}
               </button>
             )}
-            {revokeStep === 'error' && <p className="text-xs text-destructive">{t('settings.txFailed')}</p>}
+            {revokeStep === 'error' && (
+              <div className="flex items-start gap-2 rounded-2xl border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 w-3.5 h-3.5 flex-shrink-0" />
+                <div className="break-words">{revokeError || t('settings.txFailed')}</div>
+              </div>
+            )}
           </div>
         </div>
 
