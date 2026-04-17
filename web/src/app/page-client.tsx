@@ -85,10 +85,10 @@ export default function PageApp() {
     { id: 'settings', label: t('nav.settings'), icon: <Settings className="w-4 h-4" /> },
   ];
   const hashKeyTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'vault', label: t('hashkey.vault') || 'Vault', icon: <Wallet className="w-4 h-4" /> },
-    { id: 'session', label: t('hashkey.sessions') || 'Sessions', icon: <Key className="w-4 h-4" /> },
-    { id: 'history', label: t('hashkey.history') || 'History', icon: <CreditCard className="w-4 h-4" /> },
-    { id: 'hsp', label: t('hashkey.hsp') || 'HSP', icon: <TrendingUp className="w-4 h-4" /> },
+    { id: 'vault', label: t('hashkey.vault'), icon: <Wallet className="w-4 h-4" /> },
+    { id: 'session', label: t('hashkey.sessions'), icon: <Key className="w-4 h-4" /> },
+    { id: 'history', label: t('hashkey.history'), icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'hsp', label: t('hashkey.hsp'), icon: <TrendingUp className="w-4 h-4" /> },
   ];
   const tabs = hashKeyMode ? hashKeyTabs : defiTabs;
   // Determine runtime display based on connected chain
@@ -325,9 +325,9 @@ export default function PageApp() {
         {activeTab === 'vault' && (
           <div className="space-y-5 animate-fade-in-up">
             <div>
-              <h2 className="text-xl font-bold">{t('hashkey.vaultTitle') || 'Vault Management'}</h2>
+              <h2 className="text-xl font-bold">{t('hashkey.vaultTitle')}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {t('hashkey.vaultSubtitle') || 'Create vaults, deposit HSK, and manage funds'}
+                {t('hashkey.vaultSubtitle')}
               </p>
             </div>
             <SessionManager />
@@ -337,9 +337,9 @@ export default function PageApp() {
         {activeTab === 'session' && (
           <div className="space-y-5 animate-fade-in-up">
             <div>
-              <h2 className="text-xl font-bold">{t('hashkey.sessionTitle') || 'Session Caps'}</h2>
+              <h2 className="text-xl font-bold">{t('hashkey.sessionTitle')}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {t('hashkey.sessionSubtitle') || 'Grant and manage agent session permissions'}
+                {t('hashkey.sessionSubtitle')}
               </p>
             </div>
             <SessionManager />
@@ -349,9 +349,9 @@ export default function PageApp() {
         {activeTab === 'history' && (
           <div className="space-y-5 animate-fade-in-up">
             <div>
-              <h2 className="text-xl font-bold">{t('hashkey.historyTitle') || 'Payment History'}</h2>
+              <h2 className="text-xl font-bold">{t('hashkey.historyTitle')}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {t('hashkey.historySubtitle') || 'Track payment intents and execution status'}
+                {t('hashkey.historySubtitle')}
               </p>
             </div>
             <PaymentHistory />
@@ -361,9 +361,9 @@ export default function PageApp() {
         {activeTab === 'hsp' && (
           <div className="space-y-5 animate-fade-in-up">
             <div>
-              <h2 className="text-xl font-bold">{t('hashkey.hspPageTitle') || 'HSP Settlement'}</h2>
+              <h2 className="text-xl font-bold">{t('hashkey.hspPageTitle')}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {t('hashkey.hspPageSubtitle') || 'HashKey Settlement Protocol configuration'}
+                {t('hashkey.hspPageSubtitle')}
               </p>
             </div>
             <HspPanel />

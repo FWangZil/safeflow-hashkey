@@ -1,6 +1,20 @@
 import type { NextConfig } from "next";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Use import.meta.url so this works whether Next loads the config as ESM
+// or CJS (in CJS, `__dirname` would work, but this is safe in both).
+const __dirname_ = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  // Pin Turbopack's workspace root to this package. Without this, Next.js 16
+  // walks up looking for a package.json and (incorrectly) picks the monorepo
+  // root, causing module resolution failures like
+  //   "Can't resolve 'tailwindcss' in '/.../safeflow-hashkey'".
+  turbopack: {
+    root: __dirname_,
+  },
+
   // Cloudflare Workers handles HTTP compression at the edge.
   // Disabling Next.js's built-in gzip compression removes
   // `next/dist/compiled/compression` (~308 KB) from the Worker bundle.

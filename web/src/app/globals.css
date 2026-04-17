@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Explicitly constrain Tailwind v4's content scanner to this package's source.
+ * Without this it auto-detects the "project root" by walking up looking for a
+ * package.json; in this monorepo it ends up scanning the whole repo (including
+ * .history, contracts, graphify-out, etc.), pinning CPU at 100%. */
+@source "../../src/**/*.{ts,tsx,js,jsx,mdx,html}";
+@source not "../../node_modules";
+@source not "../../.next";
+
 /* ─── Light mode (default) ──────────────────────────────────── */
 :root {
   --background: #f5f6fa;

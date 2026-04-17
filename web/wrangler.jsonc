@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "safeflow-web-hashkey",
+	"name": "safeflow-hashkey",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2024-12-30",
 	"minify": true,
@@ -18,7 +18,7 @@
 		{
 			"binding": "WORKER_SELF_REFERENCE",
 			// Must match the "name" field above
-			"service": "safeflow-web-hashkey"
+			"service": "safeflow-hashkey"
 		}
 	],
 	"kv_namespaces": [

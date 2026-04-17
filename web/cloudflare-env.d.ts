@@ -6,7 +6,7 @@ declare namespace Cloudflare {
 		AUDIT_KV: KVNamespace;
 		ASSETS: Fetcher;
 		NEXTJS_ENV: string;
-		WORKER_SELF_REFERENCE: Fetcher /* safeflow-web-hashkey */;
+		WORKER_SELF_REFERENCE: Fetcher /* safeflow-hashkey */;
 	}
 }
 interface CloudflareEnv extends Cloudflare.Env {}

@@ -73,9 +73,9 @@ export default function HspPanel() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold">{t('hashkey.hspTitle') || 'HSP Settlement'}</h3>
+          <h3 className="text-base font-semibold">{t('hashkey.hspTitle')}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {t('hashkey.hspDesc') || 'HashKey Settlement Protocol configuration & status'}
+            {t('hashkey.hspDesc')}
           </p>
         </div>
         <button
@@ -84,7 +84,7 @@ export default function HspPanel() {
           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-secondary hover:bg-secondary/80 transition-colors disabled:opacity-50"
         >
           <RotateCcw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-          {t('common.refresh') || 'Refresh'}
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -99,7 +99,7 @@ export default function HspPanel() {
       {loading && !status && (
         <div className="flex items-center justify-center py-12 text-muted-foreground">
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          <span className="text-sm">{t('common.loading') || 'Loading...'}</span>
+          <span className="text-sm">{t('common.loading')}</span>
         </div>
       )}
 
@@ -121,11 +121,11 @@ export default function HspPanel() {
               <div>
                 <div className="text-sm font-semibold">
                   {status.healthy
-                    ? (t('hashkey.hspHealthy') || 'HSP Connected')
-                    : (t('hashkey.hspNotConfigured') || 'HSP Not Fully Configured')}
+                    ? (t('hashkey.hspHealthy'))
+                    : (t('hashkey.hspNotConfigured'))}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
-                  {t('hashkey.merchantName') || 'Merchant'}: {status.checks.merchantName}
+                  {t('hashkey.merchantName')}: {status.checks.merchantName}
                 </div>
               </div>
             </div>
@@ -134,7 +134,7 @@ export default function HspPanel() {
           {/* Config checks */}
           <div className="rounded-xl border border-border bg-card p-4 space-y-0.5">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              {t('hashkey.configChecks') || 'Configuration'}
+              {t('hashkey.configChecks')}
             </h4>
             <CheckRow label="HSP App Key" ok={status.checks.appKeyConfigured} />
             <CheckRow label="HSP App Secret" ok={status.checks.appSecretConfigured} />
@@ -157,10 +157,10 @@ export default function HspPanel() {
           {/* Info */}
           <div className="rounded-xl border border-border bg-card/50 p-4">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              {t('hashkey.hspInfo') || 'About HSP'}
+              {t('hashkey.hspInfo')}
             </h4>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              {t('hashkey.hspInfoDesc') || 'The HashKey Settlement Protocol (HSP) enables stablecoin payments on HashKey Chain. Configure your merchant credentials to create checkout links and receive webhook notifications for payment status updates.'}
+              {t('hashkey.hspInfoDesc')}
             </p>
           </div>
         </div>

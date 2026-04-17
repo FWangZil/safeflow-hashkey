@@ -77,9 +77,9 @@ export default function PaymentHistory() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold">{t('hashkey.paymentHistory') || 'Payment History'}</h3>
+          <h3 className="text-base font-semibold">{t('hashkey.paymentHistory')}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {t('hashkey.paymentHistoryDesc') || 'PaymentIntent lifecycle tracking'}
+            {t('hashkey.paymentHistoryDesc')}
           </p>
         </div>
         <button
@@ -88,7 +88,7 @@ export default function PaymentHistory() {
           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-secondary hover:bg-secondary/80 transition-colors disabled:opacity-50"
         >
           <RotateCcw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-          {t('common.refresh') || 'Refresh'}
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -103,7 +103,7 @@ export default function PaymentHistory() {
       {loading && intents.length === 0 && (
         <div className="flex items-center justify-center py-12 text-muted-foreground">
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          <span className="text-sm">{t('common.loading') || 'Loading...'}</span>
+          <span className="text-sm">{t('common.loading')}</span>
         </div>
       )}
 
@@ -112,7 +112,7 @@ export default function PaymentHistory() {
         <div className="rounded-xl border border-border bg-card/50 p-8 text-center">
           <Clock className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">
-            {t('hashkey.noIntents') || 'No payment intents yet'}
+            {t('hashkey.noIntents')}
           </p>
         </div>
       )}
@@ -150,16 +150,16 @@ export default function PaymentHistory() {
                 {/* Row 2: details */}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   <div>
-                    <span className="font-medium text-foreground/70">{t('hashkey.recipient') || 'Recipient'}:</span>{' '}
+                    <span className="font-medium text-foreground/70">{t('hashkey.recipient')}:</span>{' '}
                     <span className="font-mono">{shortenAddress(intent.recipient)}</span>
                   </div>
                   <div>
-                    <span className="font-medium text-foreground/70">{t('hashkey.vault') || 'Vault'}:</span>{' '}
+                    <span className="font-medium text-foreground/70">{t('hashkey.vault')}:</span>{' '}
                     #{intent.vaultId}
                   </div>
                   {intent.reason && (
                     <div className="col-span-2 truncate">
-                      <span className="font-medium text-foreground/70">{t('hashkey.reason') || 'Reason'}:</span>{' '}
+                      <span className="font-medium text-foreground/70">{t('hashkey.reason')}:</span>{' '}
                       {intent.reason}
                     </div>
                   )}
@@ -179,7 +179,7 @@ export default function PaymentHistory() {
                     className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
                   >
                     <ExternalLink className="w-3 h-3" />
-                    {t('common.viewTx') || 'View Transaction'}
+                    {t('common.viewTx')}
                   </a>
                 )}
               </div>

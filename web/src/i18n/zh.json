@@ -37,6 +37,9 @@
     "errorPrefix": "抱歉，遇到了一个错误。",
     "errorRetry": "请重试。",
     "retry": "重试",
+    "setupReadyTitle": "SafeFlow 资源已就绪",
+    "setupReadyDescription": "您的 SafeFlow Wallet 和 SessionCap 已配置完成，可以开始存款。",
+    "openSettingsCta": "打开资源中心",
     "quickPrompts": {
       "stablecoin": "Base 上最佳稳定币金库",
       "eth": "前 5 个 ETH 收益机会",
@@ -52,6 +55,12 @@
     "allProtocols": "所有协议",
     "loading": "正在从 LI.FI Earn API 加载金库...",
     "noResults": "未找到符合条件的金库。",
+    "emptyTitle": "未找到金库",
+    "emptyDescriptionFiltered": "尝试调整筛选条件或搜索关键词。",
+    "emptyDescriptionDefault": "当前没有可用的金库。",
+    "resetFiltersCta": "重置筛选",
+    "askAgentCta": "询问 AI 代理",
+    "openSettingsCta": "打开资源中心",
     "setupEyebrow": "SafeFlow 设置",
     "setupWalletTitle": "先创建第一个 SafeFlow Wallet，再开始存款",
     "setupWalletDescription": "存款会通过 SafeFlow Wallet 执行。先去设置页创建一个 Wallet，然后再回来继续下一步。",
@@ -249,9 +258,25 @@
     "hspPageTitle": "HSP 结算",
     "hspPageSubtitle": "由 HashKey 结算协议提供支持",
     "footerLeft": "SafeFlow · HashKey 链",
-    "footerRuntime": "运行时：本地 HashKey 分叉"
+    "footerRuntime": "运行时：本地 HashKey 分叉",
+    "paymentHistory": "支付记录",
+    "paymentHistoryDesc": "支付意图生命周期追踪",
+    "noIntents": "暂无支付意图",
+    "recipient": "收款方",
+    "reason": "原因",
+    "hspTitle": "HSP 结算",
+    "hspDesc": "HashKey 结算协议配置与状态",
+    "hspHealthy": "HSP 已连接",
+    "hspNotConfigured": "HSP 未完全配置",
+    "merchantName": "商户",
+    "configChecks": "配置检查",
+    "hspInfo": "关于 HSP",
+    "hspInfoDesc": "HashKey 结算协议（HSP）支持在 HashKey 链上进行稳定币支付。配置商户凭据后，即可创建支付链接并通过 webhook 接收支付状态更新。"
   },
   "common": {
-    "na": "不适用"
+    "na": "不适用",
+    "refresh": "刷新",
+    "loading": "加载中...",
+    "viewTx": "查看交易"
   }
 }

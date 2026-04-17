@@ -37,6 +37,9 @@
     "errorPrefix": "Sorry, I encountered an error.",
     "errorRetry": "Please try again.",
     "retry": "Retry",
+    "setupReadyTitle": "SafeFlow resources are ready",
+    "setupReadyDescription": "Your SafeFlow wallet and SessionCap are configured. You're ready to deposit.",
+    "openSettingsCta": "Open resource center",
     "quickPrompts": {
       "stablecoin": "Best stablecoin vaults on Base",
       "eth": "Top 5 ETH yield opportunities",
@@ -52,6 +55,12 @@
     "allProtocols": "All Protocols",
     "loading": "Loading vaults from LI.FI Earn API...",
     "noResults": "No vaults found matching your criteria.",
+    "emptyTitle": "No vaults found",
+    "emptyDescriptionFiltered": "Try adjusting your filters or search terms.",
+    "emptyDescriptionDefault": "No vaults are currently available.",
+    "resetFiltersCta": "Reset filters",
+    "askAgentCta": "Ask AI Agent",
+    "openSettingsCta": "Open resource center",
     "setupEyebrow": "SafeFlow setup",
     "setupWalletTitle": "Create your first SafeFlow wallet before you deposit",
     "setupWalletDescription": "Deposits execute through a SafeFlow wallet. Open Settings to create one, then return here to continue.",
@@ -249,9 +258,25 @@
     "hspPageTitle": "HSP Settlement",
     "hspPageSubtitle": "Powered by HashKey Settlement Protocol",
     "footerLeft": "SafeFlow · HashKey Chain",
-    "footerRuntime": "Runtime: Local HashKey Fork"
+    "footerRuntime": "Runtime: Local HashKey Fork",
+    "paymentHistory": "Payment History",
+    "paymentHistoryDesc": "PaymentIntent lifecycle tracking",
+    "noIntents": "No payment intents yet",
+    "recipient": "Recipient",
+    "reason": "Reason",
+    "hspTitle": "HSP Settlement",
+    "hspDesc": "HashKey Settlement Protocol configuration & status",
+    "hspHealthy": "HSP Connected",
+    "hspNotConfigured": "HSP Not Fully Configured",
+    "merchantName": "Merchant",
+    "configChecks": "Configuration",
+    "hspInfo": "About HSP",
+    "hspInfoDesc": "The HashKey Settlement Protocol (HSP) enables stablecoin payments on HashKey Chain. Configure your merchant credentials to create checkout links and receive webhook notifications for payment status updates."
   },
   "common": {
-    "na": "N/A"
+    "na": "N/A",
+    "refresh": "Refresh",
+    "loading": "Loading...",
+    "viewTx": "View Transaction"
   }
 }
