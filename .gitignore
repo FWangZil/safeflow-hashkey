@@ -39,6 +39,9 @@ data/
 # Deployments
 docs/deployments/
 
+# Anvil state persistence
+.hashkey-fork-state.json
+
 # Misc
 *.tsbuildinfo
 .history/

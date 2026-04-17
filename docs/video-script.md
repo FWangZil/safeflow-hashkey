@@ -1,7 +1,8 @@
-# SafeFlow EVM — Demo Video Script
+# SafeFlow — Demo Video Script
 
 > Target length: 3-4 minutes
 > Style: Screen recording with voiceover, natural pacing
+> Focus: AI payment agent on HashKey Chain with HSP integration
 
 ---
 
@@ -10,118 +11,148 @@
 **[Screen: Dark mode landing page, SafeFlow logo animates in]**
 
 Voiceover:
-> "What if managing DeFi yield was as easy as having a conversation? Meet SafeFlow EVM — an AI-powered yield agent that finds the best vault opportunities and keeps your funds safe with on-chain spending limits."
 
-**[Screen: Quick pan across the four tabs — Chat, Explore, Portfolio, Settings]**
+> "What if executing payments on-chain was as easy as having a conversation? Meet SafeFlow — an AI payment agent on HashKey Chain, integrated with the HashKey Settlement Protocol, with on-chain spending limits that keep your funds safe."
+
+**[Screen: Wallet connects to HashKey Fork Local — UI switches to HashKey mode, showing Vault / Sessions / History / HSP tabs]**
 
 ---
 
-## Scene 1: AI Chat Agent (0:20 - 1:20)
+## Scene 1: AI Chat Payment (0:20 - 1:20)
 
-**[Screen: Click on "AI Agent" tab, chat interface appears with welcome state]**
+**[Screen: Click on "Chat" tab, chat interface appears with welcome state]**
 
 Voiceover:
+
 > "Start by telling the AI what you want — in plain English or Chinese."
 
-**[Screen: Type "Find me the best stablecoin yield on Ethereum" and hit send]**
+**[Screen: Type "Pay 100 USDT to merchant 0x1234..." and hit send]**
 
 Voiceover:
-> "The agent understands your intent and queries the LI.FI Earn Data API to find matching vaults."
 
-**[Screen: Show loading state with "Analyzing vault opportunities...", then results appear with vault cards showing APY and TVL]**
+> "The agent understands your intent and creates a PaymentIntent via the HashKey Settlement Protocol."
 
-Voiceover:
-> "Results come back with real APY data, TVL, protocol info, and risk tags. Everything you need to compare at a glance."
-
-**[Screen: Hover over a vault card, click to open the detail modal]**
+**[Screen: Show loading state with "Creating HSP order...", then result appears with intent card showing recipient, amount, status]**
 
 Voiceover:
-> "Click any vault to see the full breakdown — base APY, reward APY, underlying tokens, and protocol details."
 
-**[Screen: Close modal, switch language to Chinese using the language toggle in the header]**
+> "The Producer API signs the request with the merchant's secp256k1 key, calls HSP, and creates a compliant PaymentIntent on HashKey Chain."
+
+**[Screen: Switch to "History" tab, show the newly created intent in pending state]**
 
 Voiceover:
+
+> "The payment is now queued for the AI agent to claim and execute."
+
+**[Screen: Switch language to Chinese using the language toggle in the header]**
+
+Voiceover:
+
 > "Full internationalization support — switch between English and Chinese instantly."
 
 ---
 
-## Scene 2: Vault Explorer (1:20 - 2:00)
+## Scene 2: Agent Execution on HashKey Chain (1:20 - 2:10)
 
-**[Screen: Click on "Explore" tab]**
-
-Voiceover:
-> "For a more hands-on approach, the Vault Explorer gives you a filterable table of all available vaults."
-
-**[Screen: Type "USDC" in search, select Ethereum from chain dropdown, select "Stablecoin" tag]**
+**[Screen: In a terminal, show the agent E2E runner claiming and executing the intent]**
 
 Voiceover:
-> "Filter by chain, asset, or risk category. Sort by APY or TVL to find exactly what you're looking for."
 
-**[Screen: Click the APY column header to toggle sort order]**
+> "The AI agent polls the Producer API, claims the intent, and executes the payment on HashKey Chain."
 
-Voiceover:
-> "All data comes live from the LI.FI Earn Data API, so you're always seeing current yields."
-
-**[Screen: Click "Deposit" on a vault row, detail modal opens]**
+**[Screen: Show the intent status transitioning: pending → claimed → executed → confirmed]**
 
 Voiceover:
-> "Click deposit on any vault to see the full details and proceed."
+
+> "Each status transition is driven by real on-chain activity. The agent calls SafeFlowVaultHashKey.executePayment, and the contract enforces the SessionCap spending limits before allowing the transfer."
+
+**[Screen: Click on the intent to view details with tx hash, block number, evidence hash]**
+
+Voiceover:
+
+> "Every execution produces a transaction hash on HashKey Chain and an evidence hash linking back to the AI reasoning."
+
+**[Screen: Open HashKey Testnet explorer link, show the on-chain transaction with PaymentExecuted event]**
+
+Voiceover:
+
+> "Here it is on the HashKey Chain explorer — the PaymentExecuted event with all the enforcement metadata."
 
 ---
 
-## Scene 3: On-Chain Security — SessionCap (2:00 - 2:50)
+## Scene 3: On-Chain Security — SessionCap (2:10 - 2:55)
 
-**[Screen: Click on "Settings" tab]**
+**[Screen: Click on "Sessions" tab]**
 
 Voiceover:
+
 > "Here's what makes SafeFlow different — the SessionCap system."
 
 **[Screen: Point camera at the spending limits panel — Max Per Interval, Max Total, Interval]**
 
 Voiceover:
-> "Before the AI can execute any transaction, you set strict spending limits — maximum spend per time interval, maximum total spend, and when the session expires."
+
+> "Before the AI can execute any payment, you set strict spending limits — maximum spend per time interval, maximum total spend, and when the session expires."
 
 **[Screen: Show the Agent Configuration panel — Agent Address, Expiry, Create Session Cap button]**
 
 Voiceover:
-> "These limits are enforced on-chain by the SafeFlowVault smart contract. Not by the AI. Not by our servers. By immutable smart contract logic."
 
-**[Screen: Brief flash of the Solidity contract code — show the SessionCap struct and _enforceCap modifier]**
+> "These limits are enforced on-chain by the SafeFlowVaultHashKey contract. Not by the AI. Not by our servers. By immutable Solidity logic on HashKey Chain."
+
+**[Screen: Brief flash of the Solidity contract code — show the SessionCap struct and the executePayment function with its checks]**
 
 Voiceover:
-> "The vault checks every transaction against the session cap before execution. If the limit is exceeded, the transaction reverts. Period."
+
+> "The contract checks every payment against the session cap before execution. Exceeds the interval limit? Reverts. Exceeds the total cap? Reverts. Session expired? Reverts. Period."
 
 ---
 
-## Scene 4: Architecture Walkthrough (2:50 - 3:30)
+## Scene 4: Architecture and HSP Integration (2:55 - 3:35)
 
-**[Screen: Show a simple architecture diagram or flow]**
+**[Screen: Show a simple architecture diagram — user → chat → Producer API → HSP → agent → SafeFlowVaultHashKey → HashKey Chain → HSP webhook]**
 
 Voiceover:
-> "Here's how the pieces fit together."
 
-> "You talk to the AI agent. The agent uses LI.FI's Earn Data API to discover vaults and the Composer API to build deposit transactions. Transactions are routed through SafeFlowVault, which enforces your SessionCap limits on-chain. An audit trail with evidence hashing records every action."
+> "Here's how the pieces fit together."
+>
+> "You talk to the AI agent. The Producer API creates a PaymentIntent on the HashKey Settlement Protocol. The agent claims it, executes on HashKey Chain via SafeFlowVaultHashKey, and HSP confirms settlement via webhook. An audit trail with evidence hashing records every step."
 
 **[Screen: Show the terminal — run `forge test` to demonstrate passing tests]**
 
 Voiceover:
+
 > "The smart contract is built with Solidity 0.8.24 and Foundry, with comprehensive tests. The frontend is Next.js 16 with full light and dark mode support."
+
+**[Screen: Show the HSP Status tab confirming healthy connection]**
+
+Voiceover:
+
+> "The HSP integration panel shows live configuration health — credentials, signing key, merchant address, all verified."
 
 ---
 
-## Scene 5: Light Mode & Closing (3:30 - 3:50)
+## Scene 5: Local Fork One-Click Setup & Closing (3:35 - 4:00)
+
+**[Screen: In terminal, run `./scripts/start-hashkey-fork.sh`]**
+
+Voiceover:
+
+> "Developers can spin up a complete HashKey local environment with one command — anvil fork, contract deployment, and web env configuration, all automated. State even persists across restarts."
 
 **[Screen: Click the theme toggle to switch to light mode, show the app in light theme]**
 
 Voiceover:
+
 > "SafeFlow works beautifully in both light and dark mode."
 
 **[Screen: Switch back to dark mode, zoom out to show the full app]**
 
 Voiceover:
-> "SafeFlow EVM — AI-powered yield discovery, on-chain security, zero trust assumed. Built for the DeFi Mullet Hackathon, Track 2: AI x Earn."
 
-**[Screen: Show GitHub repo URL and hackathon tags]**
+> "SafeFlow — AI payment agent on HashKey Chain, powered by the HashKey Settlement Protocol, with zero-trust on-chain security."
+
+**[Screen: Show GitHub repo URL and HashKey Chain tags]**
 
 > "Check us out on GitHub. Thanks for watching."
 
@@ -129,27 +160,34 @@ Voiceover:
 
 ## Production Notes
 
-### Setup before recording:
-1. Clear browser data for fresh state
-2. Set app to dark mode
-3. Have wallet connected on testnet with some test ETH
-4. Ensure the API routes are running and responding
-5. Close unnecessary browser tabs
+### Setup before recording
 
-### Key moments to get right:
-- The first AI response with vault cards (most impressive visual moment)
-- Language toggle switch (quick but shows polish)
-- Light/dark theme toggle (demonstrates completeness)
-- Settings page SessionCap explanation (core differentiator)
+1. Start local HashKey fork: `./scripts/start-hashkey-fork.sh`
+2. Clear browser data for fresh state
+3. Set app to dark mode
+4. Have wallet connected to HashKey Fork Local (31338) with test balance
+5. Ensure HSP credentials are configured in `.env.local`
+6. Close unnecessary browser tabs
 
-### Recording tips:
+### Key moments to get right
+
+- The first AI payment response with intent card (most impressive visual moment)
+- Agent execution transition from pending → confirmed in real-time
+- HashKey explorer link showing the on-chain PaymentExecuted event
+- Sessions tab showing SessionCap enforcement
+- HSP Status panel with live health indicators
+
+### Recording tips
+
 - Use 1920x1080 or higher resolution
 - Record at 30fps minimum
 - Use system audio capture if showing any sound effects
 - Keep mouse movements slow and deliberate
 - Pause briefly after each click to let the audience register what happened
 
-### If things go wrong:
-- If API is slow, trim the wait in editing
-- If wallet connection fails, pre-connect before recording
-- Have a backup screenshot of the chat with pre-populated messages if live demo fails
+### If things go wrong
+
+- If HSP API is slow, trim the wait in editing
+- If wallet connection fails, pre-connect to HashKey Fork Local before recording
+- Have a backup screenshot of a confirmed intent if live agent execution fails
+- Keep a pre-recorded clip of the terminal agent E2E run as fallback

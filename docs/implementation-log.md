@@ -1,222 +1,204 @@
 # Implementation Log
 
-Chronological record of what was built, decisions made, and current status.
+Chronological record of what was built, decisions made, and current status for the SafeFlow HashKey payment agent.
 
 ---
 
-## Session 1: Foundation (Apr 11)
-
-### Git Commits
-
-1. **`abcc00b`** — Initial scaffold
-2. **`d5e89d2`** — SafeFlow EVM Yield Agent skill
+## Session 1: Foundation — SafeFlowVaultHashKey Contract
 
 ### Contracts
 
-**File**: `contracts/src/SafeFlowVault.sol`
+**File:** `contracts/src/SafeFlowVaultHashKey.sol`
 
-- Combined `AgentWallet` + `SessionCap` from Sui into a single Solidity contract
-- Key design decisions:
-  - Single contract instead of separate AgentWallet.sol / SessionCap.sol — simpler deployment and interaction
-  - `SessionCap` stored as mapping + struct instead of Sui's owned object model
-  - Rate limiting uses fixed-window intervals (`intervalSeconds`) instead of Sui's per-second continuous model
-  - `evidenceHash` (bytes32) replaces `walrus_blob_id` (String) for audit trail anchoring
-  - `executeDeposit()` does `IERC20.approve(vault, amount)` then `vault.call(callData)` — compatible with LI.FI Composer output
-- Test results: **12/12 passing** in `contracts/test/SafeFlowVault.t.sol`
-  - Wallet creation, deposit, withdraw
-  - SessionCap creation, revocation
-  - executeDeposit with cap enforcement
-  - Interval rate limit reset
-  - Revert scenarios: expired cap, exceeded limits, insufficient balance, non-owner, revoked cap
-- Mock token: `contracts/test/mocks/MockERC20.sol`
-- Deploy script: `contracts/script/Deploy.s.sol`
+Key design decisions:
+
+- Single contract combining wallet management, SessionCap storage, and HSP payment execution
+- `SessionCap` stored as mapping + struct with per-interval rate limits and lifetime spending caps
+- Fixed-window interval rate limiting (`intervalSeconds`) for deterministic enforcement
+- `evidenceHash` (bytes32) links on-chain payment events to off-chain audit records
+- `executePayment()` enforces: cap active, agent matches, not expired, amount within interval + total limits, sufficient balance
+- Native HSK and ERC-20 support via address(0) sentinel
+
+Test results: full test suite in `contracts/test/SafeFlowVaultHashKey.t.sol`
+
+- Wallet creation, deposit, withdraw (HSK + ERC-20)
+- SessionCap creation, revocation
+- executePayment with cap enforcement
+- Interval rate limit reset logic
+- Revert scenarios: expired cap, exceeded limits, insufficient balance, non-owner, revoked cap
+
+**Deploy script:** `contracts/script/DeployHashKey.s.sol`
 
 ### Frontend (Next.js)
 
-**Built with**: Next.js 16 + React 19 + Tailwind CSS v4 + wagmi v2 + RainbowKit
+**Stack:** Next.js 16 + React 19 + Tailwind CSS 4 + wagmi v2 + RainbowKit
 
-- **Providers** (`web/src/app/providers.tsx`): wagmi config for Base, Arbitrum, Ethereum + testnets
-- **Layout** (`web/src/app/layout.tsx`): Dark theme, Geist font, Providers wrapper
-- **Globals** (`web/src/app/globals.css`): Custom design tokens (indigo primary, zinc borders, dark background)
-- **Main page** (`web/src/app/page.tsx`): Tab-based dashboard with:
-  - Explore tab — `VaultExplorer` component
-  - AI Agent tab — `ChatAgent` component
-  - Portfolio tab — placeholder
-  - Settings tab — SessionCap creation form (UI only, no contract binding yet)
-  - Vault detail modal on click
-  - Custom `ConnectButton.Custom` with chain + account display
-- **Build status**: ✅ Compiles and builds successfully
+Dashboard tabs activate when connected to a HashKey chain (133 / 177 / 31338):
+
+- **Vault** — HashKey vault overview, deposit/withdraw
+- **Sessions** — SessionCap creation, revocation, allowance display
+- **History** — PaymentIntent list with status badges
+- **HSP** — HSP configuration health check panel
+- **Chat** — AI payment command interface
 
 ### Components
 
-- **VaultExplorer** (`web/src/components/VaultExplorer.tsx`):
-  - Fetches from LI.FI Earn API on mount
-  - Filters: search text, chain, tag
-  - Sort: APY, TVL (toggle asc/desc)
-  - Table with APY (green), TVL, token symbols, tags, deposit button
-  - Loading spinner, empty state, error display
+- **PaymentHistory** (`web/src/components/PaymentHistory.tsx`) — intent table with status filters, explorer links
+- **HspPanel** (`web/src/components/HspPanel.tsx`) — HSP credentials check, webhook status, environment info
+- **SessionManager** (`web/src/components/SessionManager.tsx`) — on-chain SessionCap CRUD via wagmi writes
+- **ChatAgent** (`web/src/components/ChatAgent.tsx`) — LLM chat with payment intent creation actions
 
-- **ChatAgent** (`web/src/components/ChatAgent.tsx`):
-  - Message history with user/assistant bubbles
-  - Welcome message with suggested prompts
-  - Calls `/api/agent/chat` POST endpoint
-  - Renders vault cards inline in assistant messages
-  - Loading state with spinner
+### API Routes (Producer API)
 
-### API Routes
+Located under `web/src/app/api/hashkey/`:
 
-- **`/api/agent/chat`** (`web/src/app/api/agent/chat/route.ts`):
-  - Rule-based intent parser (no LLM dependency for MVP)
-  - Intents: `search_vaults`, `deposit`, `portfolio`, `general`
-  - Extracts: chain, token symbol, tag, min APY, result limit
-  - Calls LI.FI Earn API for vault search
-  - Returns structured response with markdown summary + vault objects
+- **`intents/route.ts`** — POST (create), GET (list)
+- **`intents/[id]/route.ts`** — GET single intent
+- **`intents/[id]/ack/route.ts`** — POST agent acknowledge
+- **`intents/[id]/result/route.ts`** — POST agent result report
+- **`intents/next/route.ts`** — GET next pending intent (agent polling)
+- **`hsp/webhook/route.ts`** — POST HSP webhook callback (signature verified)
+- **`hsp/status/route.ts`** — GET HSP health check
 
-- **`/api/audit`** (`web/src/app/api/audit/route.ts`):
-  - GET — list all entries
-  - POST — create entry, compute SHA-256 evidenceHash
-  - PATCH — update entry (txHash, ipfsCid, status)
-  - Storage: JSON file at `web/data/audit.json`
+Plus shared:
 
-### Lib
+- **`api/agent/chat`** — LLM chat with structured tool-call payloads for payment creation
+- **`api/audit`** — Audit trail CRUD with evidence hashing
 
-- **`earn-api.ts`** — LI.FI Earn Data API client with `fetchVaults()`, `fetchPortfolio()`, `formatApy()`, `formatTvl()`
-- **`composer.ts`** — LI.FI Composer API client with `fetchQuote()`, `buildDepositQuote()`
-- **`contracts.ts`** — Full SafeFlowVault ABI (10 functions + 6 events) + `getSafeFlowAddress()` helper
+### Lib Modules
+
+- **`lib/mode.ts`** — `isHashKeyChain()`, `getModeForChain()`, `HASHKEY_ENABLED`, `HASHKEY_LOCAL_FORK_*` constants
+- **`lib/chains.ts`** — `hashkeyTestnet`, `hashkeyMainnet`, `localHashKeyForkChain` definitions + `walletChains` builder
+- **`lib/contracts.ts`** — `SAFEFLOW_VAULT_HASHKEY_ABI`, `getVaultAbi(chainId)`, `getSafeFlowAddress(chainId)`
+- **`lib/tokens.ts`** — HSK native + ecosystem token metadata
+- **`lib/hsp/client.ts`** — `HSPClient` class: JWT signing (ES256K), order creation, payment queries, webhook verification
+- **`lib/hsp/constants.ts`** — HSP environment URLs, testnet/mainnet token addresses
 
 ### Types
 
-`web/src/types/index.ts` — TypeScript interfaces for:
-- `EarnVault`, `EarnToken`, `VaultAnalytics`
-- `ComposerQuote`, `TransactionRequest`
-- `PortfolioPosition`
+`web/src/types/index.ts`:
+
+- `PaymentIntent`, `PaymentIntentStatus`
+- `HashKeySessionCapInfo`, `HashKeyVaultInfo`
 - `AuditEntry`
 - `ChatMessage`, `ChatAction`
-- `SessionCapConfig`
-- `CHAIN_IDS` constant map
 
-### CLI
+---
 
-**File**: `cli/src/index.ts`
+## Session 2: Local Fork Support
 
-- `safeflow vault list` — tabular vault display with `--chain`, `--token`, `--protocol`, `--tag`, `--min-apy`, `--min-tvl`, `--sort`, `--limit`
-- `safeflow info <address>` — vault detail view
-- `safeflow portfolio <address>` — portfolio positions
-- Uses chalk for colored output
-- Tested: `--help` works, CLI compiles
+### Summary
 
-### Skill
+Added first-class HashKey Chain local fork support to enable offline development and testing without consuming testnet HSK.
 
-**Installed at**: `~/.codeium/windsurf/skills/safeflow-evm-yield/`
+### Completed
 
-- `SKILL.md` — Full workflow documentation for external AI agents
-- `references/abi.json` — Contract ABI
-- Covers: vault discovery, deposit execution, portfolio, SessionCap management, audit trail
-- Trigger keywords: SafeFlow, yield agent, vault discovery, earn API, session cap, etc.
-- Copied to `docs/skill-spec.md` in repo
+1. **HashKey fork local chain definition** — `localHashKeyForkChain` in `lib/chains.ts` with chain ID 31338, port 8546.
+
+2. **Parallel env var namespace** — `NEXT_PUBLIC_HASHKEY_LOCAL_FORK_*` variables separate from existing HashKey testnet/mainnet config, avoiding any conflict.
+
+3. **Chain-based mode detection** — `isHashKeyChain(chainId)` handles testnet, mainnet, and local fork chain IDs. UI activates HashKey tabs whenever the wallet is on any of them.
+
+4. **Dynamic wallet chain registry** — `walletChains` includes HashKey chains when `NEXT_PUBLIC_HASHKEY_ENABLED=true` or fork is enabled.
+
+### Key File Changes
+
+- `web/src/lib/mode.ts` — added `HASHKEY_LOCAL_FORK_*` constants + `isHashKeyChain()`
+- `web/src/lib/chains.ts` — added `localHashKeyForkChain`, updated `buildWalletChains()`
+- `web/src/lib/contracts.ts` — parameterized `getVaultAbi(chainId)` / `getSafeFlowAddress(chainId)`
+- `web/src/app/page-client.tsx` — chain-reactive tab switching via `useChainId()`
+- `web/.env.example` — added HashKey fork variable templates
+
+---
+
+## Session 3: One-Click Deploy Workflow
+
+### Summary
+
+Created automated workflow to spin up HashKey fork + deploy contract + configure web env in a single command.
+
+### Completed
+
+1. **`scripts/start-hashkey-fork.sh`** — forks HashKey Testnet into anvil on port 8546, deploys contract, writes env vars. State persisted across restarts via `anvil --state`.
+
+2. **Deploy script extensions** — `scripts/deploy-contract-and-configure-web.mjs` now supports:
+   - `--network local_hashkey_fork` target
+   - `--sync-hashkey-fork-env` to write full local fork env bundle
+   - Auto-detect contract variant based on network name
+
+3. **Graceful state management** — Ctrl+C triggers anvil state dump. Next run loads state and skips redeploy. `--fresh` flag forces clean redeploy.
+
+### Key File Changes
+
+- `scripts/start-hashkey-fork.sh` (new)
+- `scripts/deploy-contract-and-configure-web.mjs`
+- `.gitignore` — added `.hashkey-fork-state.json`
+
+---
+
+## Session 4: HSP SDK Migration
+
+### Summary
+
+Migrated the HashKey Settlement Protocol client SDK into the main project, integrated into Producer API.
+
+### Completed
+
+1. **HSP client SDK** — `web/src/lib/hsp/client.ts` with:
+   - HMAC-SHA256 request signing
+   - ES256K JWT generation with secp256k1 merchant private key
+   - Order creation, payment query methods
+   - Webhook signature verification
+
+2. **Producer API Integration** — `/api/hashkey/*` routes consume `HSPClient` for all HSP interactions.
+
+3. **Environment variables** — full HSP credential set documented in `.env.example`:
+   - `HSP_APP_KEY`, `HSP_APP_SECRET`, `HSP_MERCHANT_PRIVATE_KEY`
+   - `HSP_PAY_TO`, `HSP_BASE_URL`, `HSP_ENVIRONMENT`
+
+### Key File Changes
+
+- `web/src/lib/hsp/client.ts` (new)
+- `web/src/lib/hsp/constants.ts` (new)
+- `web/src/app/api/hashkey/hsp/webhook/route.ts` (new)
+- `web/src/app/api/hashkey/hsp/status/route.ts` (new)
+
+---
+
+## Session 5: Documentation Overhaul
+
+### Summary
+
+Consolidated all documentation around HashKey Chain as the primary (and only) target. Removed legacy dual-mode framing and positioned SafeFlow as a native HashKey payment agent.
+
+### Completed
+
+- `README.md` — rewritten as HashKey payment agent
+- `CLAUDE.md` — HashKey-focused development guide
+- `docs/architecture.md` — HashKey architecture, HSP integration, Producer API flow
+- `docs/skill-spec.md` — `safeflow-hashkey-payment` skill with HSP workflow
+- `docs/submission.md` — hackathon submission for HashKey Chain
+- `docs/video-script.md` — demo video script showcasing HSP + HashKey execution
+- `docs/plan.md` — HashKey implementation plan
+- `docs/local-fork-testing-guide.md` — HashKey fork guide
 
 ---
 
 ## Known Issues & Technical Debt
 
-1. **No OpenAI integration** — Chat uses rule-based intent parsing, no LLM
-2. **No wagmi hooks for contract** — Settings page is UI-only, no on-chain interaction yet
-3. **Portfolio page is placeholder** — Needs wallet connection + LI.FI portfolio API call
-4. **Audit storage is JSON file** — Should migrate to SQLite for production
-5. **IPFS upload not implemented** — Extension API endpoint exists in plan but not coded
-6. **No testnet deployment** — Contract not yet deployed to Base Sepolia
-7. **Lucide icon version** — `Github` icon doesn't exist in installed version, replaced with `ExternalLink`
+1. **Audit storage is JSON file** — should migrate to SQLite for production
+2. **IPFS upload not implemented** — extension hooks exist but no active upload pipeline
+3. **HashKey Mainnet not yet deployed** — development remains on Testnet (133)
+4. **No gas sponsorship** — users need HSK in their wallet to execute payments
+5. **Single-agent execution** — no multi-agent coordination yet
 
 ---
 
-## Session 2: Frontend Fixes & Local Fork Support (Apr 15)
+## Next Steps
 
-### Summary
-
-Focused on fixing frontend runtime issues and enabling local Base fork testing without colliding with real Base in wallet UIs.
-
-See full details: [`docs/frontend-network-runtime-notes.md`](./frontend-network-runtime-notes.md)
-
-### Completed
-
-1. **Fixed modal overlay positioning** — Removed erroneous global `.fixed` override that caused vault deposit modals to appear misplaced.
-
-2. **Implemented actionable wallet chain switching** — Replaced passive wrong-chain warning with a real `wagmi useSwitchChain()` flow that also falls back to `wallet_addEthereumChain` when needed.
-
-3. **Added localhost Base fork support** — Introduced execution-chain mapping so the app can interpret Base vaults while executing against a local fork using a dedicated chain id (e.g., `31337`) to avoid wallet conflicts.
-
-### Key File Changes
-
-- `web/src/app/globals.css`
-- `web/src/app/providers.tsx`
-- `web/src/components/DepositModal.tsx`
-- `web/src/lib/chains.ts` (new)
-- `web/.env.example`
-
-### Validation
-
-- ESLint passes for all touched files.
-- Runtime behavior verified: modal centers, chain switching attempts wallet action, local fork network appears in wallet UI when enabled.
-
-### Next Options (Documented)
-
-- Option A: Add `local_base_fork` preset to deploy/configure script.
-- Option B: Add UI badge to visibly distinguish `Real Base` vs `Local Base Fork`.
-- Option C: Extract chain switching into reusable frontend utility.
-
----
-
-## Session 3: Local Fork Deploy Workflow & Runtime Badge (Apr 15)
-
-### Summary
-
-Completed the next two local-fork follow-ups so the developer workflow and page-level runtime visibility now match the frontend execution model.
-
-### Completed
-
-1. **Added `local_base_fork` deployment support** — `scripts/deploy-contract-and-configure-web.mjs` now treats the local Base fork as a first-class target and can optionally sync the full `NEXT_PUBLIC_LOCAL_FORK_*` env bundle with an explicit flag.
-
-2. **Added a visible runtime badge** — The app shell now exposes `Base Mainnet` vs `Base Fork Local` in both the header and footer using the shared runtime helper from `web/src/lib/chains.ts`.
-
-### Key File Changes
-
-- `scripts/deploy-contract-and-configure-web.mjs`
-- `web/src/app/page.tsx`
-- `web/src/lib/chains.ts`
-- `web/src/i18n/en.json`
-- `web/src/i18n/zh.json`
-- `web/.env.example`
-- `docs/frontend-network-runtime-notes.md`
-
-### Validation
-
-- Targeted ESLint passes for the touched frontend runtime files.
-- The deploy helper now exposes a documented `local_base_fork` flow for contract-only updates and explicit local runtime env synchronization.
-
----
-
-## Session 4: Shared Chain Switching Utility (Apr 15)
-
-### Summary
-
-Refactored the wallet network mutation path into a reusable frontend hook so the local fork runtime behavior can be reused outside the deposit modal.
-
-### Completed
-
-1. **Extracted switch/add chain logic** — Added `web/src/lib/useSwitchOrAddChain.ts` to own `useSwitchChain()` calls, `wallet_addEthereumChain` fallback behavior, and standardized error handling.
-
-2. **Simplified DepositModal and Settings flows** — `web/src/components/DepositModal.tsx` and `web/src/components/SessionManager.tsx` now consume the shared hook instead of embedding wallet network mutation logic directly.
-
-### Validation
-
-- Targeted ESLint passes for `DepositModal.tsx` and the new hook.
-
----
-
-## Next Steps (Day 2)
-
-1. Connect Settings page to contract via wagmi `useWriteContract`
-2. Implement portfolio page with real LI.FI data
-3. Deploy contract to Base Sepolia
-4. Add OpenAI integration for smarter chat responses
-5. End-to-end deposit flow: chat → vault → audit → contract → confirm
+1. Deploy `SafeFlowVaultHashKey` to HashKey Mainnet (177) with production HSP credentials
+2. Migrate audit storage from JSON to SQLite
+3. Add HSP webhook retry + replay visibility
+4. Implement HashKey Chain gas sponsorship integration
+5. Add cross-intent merchant analytics dashboard
+6. Record and publish demo video

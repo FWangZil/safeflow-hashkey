@@ -235,6 +235,22 @@
     "success": "已转入 1000 USDC！",
     "error": "水龙头出错"
   },
+  "hashkey": {
+    "vault": "金库",
+    "sessions": "会话",
+    "history": "支付记录",
+    "hsp": "HSP",
+    "vaultTitle": "金库管理",
+    "vaultSubtitle": "创建金库、存入 HSK、管理资金",
+    "sessionTitle": "会话权限",
+    "sessionSubtitle": "授予和管理代理会话权限",
+    "historyTitle": "支付记录",
+    "historySubtitle": "追踪支付意图和执行状态",
+    "hspPageTitle": "HSP 结算",
+    "hspPageSubtitle": "由 HashKey 结算协议提供支持",
+    "footerLeft": "SafeFlow · HashKey 链",
+    "footerRuntime": "运行时：本地 HashKey 分叉"
+  },
   "common": {
     "na": "不适用"
   }

@@ -15,7 +15,10 @@ const MANIFESTS_DIR = join(ROOT_DIR, 'docs', 'deployments');
 const LOCAL_FORK_NETWORK = 'local_base_fork';
 const LOCAL_FORK_RPC_DEFAULT = 'http://127.0.0.1:8545';
 const LOCAL_FORK_NAME_DEFAULT = 'Base Fork Local';
-const BUILTIN_WALLET_CHAIN_IDS = new Set([1, 8453, 84532, 42161, 421614]);
+const HASHKEY_LOCAL_FORK_NETWORK = 'local_hashkey_fork';
+const HASHKEY_LOCAL_FORK_RPC_DEFAULT = 'http://127.0.0.1:8546';
+const HASHKEY_LOCAL_FORK_NAME_DEFAULT = 'HashKey Fork Local';
+const BUILTIN_WALLET_CHAIN_IDS = new Set([1, 8453, 84532, 42161, 421614, 133, 177]);
 
 const NETWORKS = {
   base: {
@@ -38,17 +41,39 @@ const NETWORKS = {
     rpcEnvCandidates: ['NEXT_PUBLIC_LOCAL_FORK_RPC_URL', 'LOCAL_FORK_RPC_URL'],
     defaultRpcUrl: LOCAL_FORK_RPC_DEFAULT,
   },
+  hashkey_testnet: {
+    kind: 'static',
+    chainId: 133,
+    rpcEnvCandidates: ['HASHKEY_TESTNET_RPC_URL', 'RPC_URL'],
+    defaultRpcUrl: 'https://testnet.hsk.xyz',
+  },
+  hashkey_mainnet: {
+    kind: 'static',
+    chainId: 177,
+    rpcEnvCandidates: ['HASHKEY_MAINNET_RPC_URL', 'RPC_URL'],
+    defaultRpcUrl: 'https://mainnet.hsk.xyz',
+  },
+  [HASHKEY_LOCAL_FORK_NETWORK]: {
+    kind: 'hashkey-fork',
+    sourceChainId: 133,
+    sourceName: 'HashKey Testnet',
+    rpcEnvCandidates: ['NEXT_PUBLIC_HASHKEY_LOCAL_FORK_RPC_URL', 'HASHKEY_LOCAL_FORK_RPC_URL'],
+    defaultRpcUrl: HASHKEY_LOCAL_FORK_RPC_DEFAULT,
+    defaultForkRpc: 'https://testnet.hsk.xyz',
+  },
 };
 
 function printHelp() {
-  console.log(`Usage: node scripts/deploy-contract-and-configure-web.mjs [options]\n\nOptions:\n  --network <name>           Target network (${Object.keys(NETWORKS).join(', ')})\n  --force                    Force redeploy even if a deployment already exists\n  --web-env <path>           Override web env file path\n  --sync-local-fork-env      When deploying to local_base_fork, also sync NEXT_PUBLIC_LOCAL_FORK_* values into the web env file\n  --configure-local-fork     Alias for --sync-local-fork-env\n  --help                     Show this help\n`);
+  console.log(`Usage: node scripts/deploy-contract-and-configure-web.mjs [options]\n\nOptions:\n  --network <name>           Target network (${Object.keys(NETWORKS).join(', ')})\n  --contract <type>          Contract variant: 'default' or 'hashkey' (default: auto-detect from network)\n  --force                    Force redeploy even if a deployment already exists\n  --web-env <path>           Override web env file path\n  --sync-local-fork-env      When deploying to local_base_fork, sync NEXT_PUBLIC_LOCAL_FORK_* values\n  --sync-hashkey-fork-env    When deploying to local_hashkey_fork, sync NEXT_PUBLIC_HASHKEY_LOCAL_FORK_* values\n  --configure-local-fork     Alias for --sync-local-fork-env / --sync-hashkey-fork-env\n  --help                     Show this help\n`);
 }
 
 function parseArgs(argv) {
   const options = {
     network: process.env.SAFEFLOW_NETWORK || 'base_sepolia',
+    contract: null,
     force: false,
     syncLocalForkEnv: false,
+    syncHashkeyForkEnv: false,
     webEnvPath: WEB_ENV_PATH,
   };
 
@@ -62,14 +87,33 @@ function parseArgs(argv) {
       options.force = true;
       continue;
     }
-    if (arg === '--sync-local-fork-env' || arg === '--configure-local-fork') {
+    if (arg === '--sync-local-fork-env') {
       options.syncLocalForkEnv = true;
+      continue;
+    }
+    if (arg === '--sync-hashkey-fork-env') {
+      options.syncHashkeyForkEnv = true;
+      continue;
+    }
+    if (arg === '--configure-local-fork') {
+      options.syncLocalForkEnv = true;
+      options.syncHashkeyForkEnv = true;
       continue;
     }
     if (arg === '--network') {
       const value = argv[index + 1];
       if (!value) throw new Error('Missing value for --network');
       options.network = value;
+      index += 1;
+      continue;
+    }
+    if (arg === '--contract') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('Missing value for --contract');
+      if (value !== 'default' && value !== 'hashkey') {
+        throw new Error(`Invalid --contract value: ${value}. Expected 'default' or 'hashkey'.`);
+      }
+      options.contract = value;
       index += 1;
       continue;
     }
@@ -81,6 +125,12 @@ function parseArgs(argv) {
       continue;
     }
     throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  // Auto-detect contract variant from network if not specified
+  if (!options.contract) {
+    options.contract = (options.network.startsWith('hashkey_') || options.network === HASHKEY_LOCAL_FORK_NETWORK)
+      ? 'hashkey' : 'default';
   }
 
   return options;
@@ -139,10 +189,48 @@ function resolveLocalForkConfig(networkConfig) {
   };
 }
 
+function resolveHashkeyLocalForkConfig(networkConfig) {
+  const chainId = parseIntegerEnv('NEXT_PUBLIC_HASHKEY_LOCAL_FORK_CHAIN_ID', 31338);
+  const sourceChainId = networkConfig.sourceChainId;
+
+  if (BUILTIN_WALLET_CHAIN_IDS.has(chainId)) {
+    throw new Error(
+      `NEXT_PUBLIC_HASHKEY_LOCAL_FORK_CHAIN_ID=${chainId} conflicts with a built-in wallet chain. Use a dedicated local chain id such as 31338.`,
+    );
+  }
+
+  let rpcUrl = networkConfig.defaultRpcUrl;
+  let rpcEnvName = 'default:localhost';
+
+  for (const envName of networkConfig.rpcEnvCandidates) {
+    const value = process.env[envName];
+    if (value) {
+      rpcUrl = value;
+      rpcEnvName = envName;
+      break;
+    }
+  }
+
+  return {
+    rpcUrl,
+    rpcEnvName,
+    chainId,
+    sourceChainId,
+    chainName: process.env.NEXT_PUBLIC_HASHKEY_LOCAL_FORK_NAME || HASHKEY_LOCAL_FORK_NAME_DEFAULT,
+    explorerUrl: process.env.NEXT_PUBLIC_HASHKEY_LOCAL_FORK_EXPLORER_URL || '',
+    forkRpcUrl: networkConfig.defaultForkRpc,
+    isLocalFork: true,
+    isHashkeyFork: true,
+  };
+}
+
 function resolveRpcConfig(network) {
   const networkConfig = requireNetworkConfig(network);
   if (networkConfig.kind === 'local-fork') {
     return resolveLocalForkConfig(networkConfig);
+  }
+  if (networkConfig.kind === 'hashkey-fork') {
+    return resolveHashkeyLocalForkConfig(networkConfig);
   }
 
   for (const envName of networkConfig.rpcEnvCandidates) {
@@ -151,6 +239,12 @@ function resolveRpcConfig(network) {
       return { rpcUrl: value, rpcEnvName: envName, chainId: networkConfig.chainId, isLocalFork: false };
     }
   }
+
+  // Use defaultRpcUrl if available (e.g., hashkey networks)
+  if (networkConfig.defaultRpcUrl) {
+    return { rpcUrl: networkConfig.defaultRpcUrl, rpcEnvName: 'default', chainId: networkConfig.chainId, isLocalFork: false };
+  }
+
   throw new Error(`Missing RPC URL for ${network}. Set one of ${networkConfig.rpcEnvCandidates.join(', ')}`);
 }
 
@@ -304,14 +398,38 @@ async function resolveExistingDeployment(network, rpcUrl, webEnvPath) {
   return null;
 }
 
-async function runForgeDeploy(rpcUrl) {
+const CONTRACT_VARIANTS = {
+  default: {
+    scriptPath: 'script/Deploy.s.sol:DeployScript',
+    addressPatterns: [
+      /SafeFlowVault deployed at:\s*(0x[a-fA-F0-9]{40})/,
+      /Deployed to:\s*(0x[a-fA-F0-9]{40})/,
+    ],
+    envKey: 'NEXT_PUBLIC_SAFEFLOW_CONTRACT',
+    manifestKey: 'SafeFlowVault',
+  },
+  hashkey: {
+    scriptPath: 'script/DeployHashKey.s.sol:DeployHashKeyScript',
+    addressPatterns: [
+      /SafeFlowVaultHashKey deployed at:\s*(0x[a-fA-F0-9]{40})/,
+      /Deployed to:\s*(0x[a-fA-F0-9]{40})/,
+    ],
+    envKey: 'NEXT_PUBLIC_HASHKEY_CONTRACT',
+    manifestKey: 'SafeFlowVaultHashKey',
+  },
+};
+
+async function runForgeDeploy(rpcUrl, contractVariant = 'default') {
   await ensureForgeInstalled();
   requirePrivateKey();
+
+  const variant = CONTRACT_VARIANTS[contractVariant];
+  if (!variant) throw new Error(`Unknown contract variant: ${contractVariant}`);
 
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(
       'forge',
-      ['script', 'script/Deploy.s.sol:DeployScript', '--rpc-url', rpcUrl, '--broadcast'],
+      ['script', variant.scriptPath, '--rpc-url', rpcUrl, '--broadcast'],
       {
         cwd: CONTRACTS_DIR,
         env: process.env,
@@ -342,10 +460,7 @@ async function runForgeDeploy(rpcUrl) {
         return;
       }
 
-      const matches = [
-        combinedOutput.match(/SafeFlowVault deployed at:\s*(0x[a-fA-F0-9]{40})/),
-        combinedOutput.match(/Deployed to:\s*(0x[a-fA-F0-9]{40})/),
-      ];
+      const matches = variant.addressPatterns.map(pattern => combinedOutput.match(pattern));
       const address = matches.find(Boolean)?.[1];
       if (!address) {
         rejectPromise(new Error('Deployment succeeded but contract address could not be parsed from forge output.'));
@@ -371,6 +486,17 @@ function buildLocalForkEnvUpdates(networkRuntime) {
     NEXT_PUBLIC_LOCAL_FORK_RPC_URL: networkRuntime.rpcUrl,
     NEXT_PUBLIC_LOCAL_FORK_NAME: networkRuntime.chainName,
     NEXT_PUBLIC_LOCAL_FORK_EXPLORER_URL: networkRuntime.explorerUrl,
+  };
+}
+
+function buildHashkeyLocalForkEnvUpdates(networkRuntime) {
+  return {
+    NEXT_PUBLIC_HASHKEY_ENABLED: 'true',
+    NEXT_PUBLIC_HASHKEY_LOCAL_FORK_ENABLED: 'true',
+    NEXT_PUBLIC_HASHKEY_LOCAL_FORK_CHAIN_ID: String(networkRuntime.chainId),
+    NEXT_PUBLIC_HASHKEY_LOCAL_FORK_RPC_URL: networkRuntime.rpcUrl,
+    NEXT_PUBLIC_HASHKEY_LOCAL_FORK_NAME: networkRuntime.chainName,
+    NEXT_PUBLIC_HASHKEY_LOCAL_FORK_EXPLORER_URL: networkRuntime.explorerUrl,
   };
 }
 
@@ -401,10 +527,16 @@ async function main() {
   if (options.syncLocalForkEnv && options.network !== LOCAL_FORK_NETWORK) {
     throw new Error('--sync-local-fork-env is only supported with --network local_base_fork');
   }
+  if (options.syncHashkeyForkEnv && options.network !== HASHKEY_LOCAL_FORK_NETWORK) {
+    throw new Error('--sync-hashkey-fork-env is only supported with --network local_hashkey_fork');
+  }
 
   const networkRuntime = resolveRpcConfig(options.network);
   const { rpcUrl, rpcEnvName, chainId } = networkRuntime;
   const existing = options.force ? null : await resolveExistingDeployment(options.network, rpcUrl, options.webEnvPath);
+
+  const variant = CONTRACT_VARIANTS[options.contract];
+  const contractLabel = variant.manifestKey;
 
   let address;
   let status;
@@ -416,13 +548,13 @@ async function main() {
     status = 'reused';
     source = existing.source;
     sourcePath = existing.sourcePath;
-    console.log(`Using existing SafeFlowVault on ${options.network}: ${address}`);
+    console.log(`Using existing ${contractLabel} on ${options.network}: ${address}`);
   } else {
-    console.log(`Deploying SafeFlowVault to ${options.network}...`);
-    address = await runForgeDeploy(rpcUrl);
+    console.log(`Deploying ${contractLabel} to ${options.network}...`);
+    address = await runForgeDeploy(rpcUrl, options.contract);
     status = 'deployed';
     source = 'forge-script';
-    console.log(`Deployed SafeFlowVault to ${address}`);
+    console.log(`Deployed ${contractLabel} to ${address}`);
   }
 
   const live = await isLiveContract(rpcUrl, address);
@@ -431,8 +563,10 @@ async function main() {
   }
 
   const webEnvUpdates = {
-    NEXT_PUBLIC_SAFEFLOW_CONTRACT: address,
+    [variant.envKey]: address,
     ...(options.syncLocalForkEnv && networkRuntime.isLocalFork ? buildLocalForkEnvUpdates(networkRuntime) : {}),
+    ...(options.syncHashkeyForkEnv && networkRuntime.isHashkeyFork ? buildHashkeyLocalForkEnvUpdates(networkRuntime) : {}),
+    ...(options.contract === 'hashkey' && !networkRuntime.isHashkeyFork ? { NEXT_PUBLIC_HASHKEY_ENABLED: 'true' } : {}),
   };
 
   await updateWebEnv(options.webEnvPath, webEnvUpdates);
@@ -444,8 +578,9 @@ async function main() {
     status,
     forceRedeploy: options.force,
     rpcEnvName,
+    contractVariant: options.contract,
     contracts: {
-      SafeFlowVault: address,
+      [contractLabel]: address,
     },
     webEnvFile: options.webEnvPath,
     webEnv: webEnvUpdates,
@@ -473,8 +608,11 @@ async function main() {
   console.log(`Web env updated: ${options.webEnvPath}`);
   console.log(`Deployment record: ${historyPath}`);
   console.log(`Latest record: ${latestPath}`);
-  if (networkRuntime.isLocalFork) {
+  if (networkRuntime.isLocalFork && !networkRuntime.isHashkeyFork) {
     console.log(`Local fork runtime sync: ${options.syncLocalForkEnv ? 'enabled' : 'skipped'}`);
+  }
+  if (networkRuntime.isHashkeyFork) {
+    console.log(`HashKey fork runtime sync: ${options.syncHashkeyForkEnv ? 'enabled' : 'skipped'}`);
   }
   console.log('');
   console.log('You can now start the web app with:');

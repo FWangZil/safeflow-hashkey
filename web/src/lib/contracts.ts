@@ -1,3 +1,5 @@
+import { isHashKeyMode, isHashKeyChain } from './mode';
+
 export const SAFEFLOW_VAULT_ABI = [
   {
     type: 'function',
@@ -297,7 +299,216 @@ export const ERC20_ABI = [
   },
 ] as const;
 
-export function getSafeFlowAddress(): `0x${string}` {
+// ─── HashKey Vault ABI (native HSK, payment-oriented) ─────────────
+
+export const HASHKEY_VAULT_ABI = [
+  {
+    type: 'function',
+    name: 'createVault',
+    inputs: [],
+    outputs: [{ name: 'vaultId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'deposit',
+    inputs: [{ name: 'vaultId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'withdraw',
+    inputs: [
+      { name: 'vaultId', type: 'uint256' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'grantSession',
+    inputs: [
+      { name: 'vaultId', type: 'uint256' },
+      { name: 'agent', type: 'address' },
+      { name: 'maxSpendPerSec', type: 'uint256' },
+      { name: 'maxSpendTotal', type: 'uint256' },
+      { name: 'expiresAtSec', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'revokeSession',
+    inputs: [
+      { name: 'vaultId', type: 'uint256' },
+      { name: 'agent', type: 'address' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'executePayment',
+    inputs: [
+      { name: 'vaultId', type: 'uint256' },
+      { name: 'recipient', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'reasonHash', type: 'bytes32' },
+      { name: 'reasonMemo', type: 'string' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'getVault',
+    inputs: [{ name: 'vaultId', type: 'uint256' }],
+    outputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'balance', type: 'uint256' },
+      { name: 'exists', type: 'bool' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getSession',
+    inputs: [
+      { name: 'vaultId', type: 'uint256' },
+      { name: 'agent', type: 'address' },
+    ],
+    outputs: [
+      { name: 'maxSpendPerSecond', type: 'uint256' },
+      { name: 'maxSpendTotal', type: 'uint256' },
+      { name: 'totalSpent', type: 'uint256' },
+      { name: 'lastSpendTimeSec', type: 'uint256' },
+      { name: 'expiresAtSec', type: 'uint256' },
+      { name: 'exists', type: 'bool' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getOwnerVaults',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAvailableAllowance',
+    inputs: [
+      { name: 'vaultId', type: 'uint256' },
+      { name: 'agent', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'nextVaultId',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'VaultCreated',
+    inputs: [
+      { name: 'vaultId', type: 'uint256', indexed: true },
+      { name: 'owner', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'Deposited',
+    inputs: [
+      { name: 'vaultId', type: 'uint256', indexed: true },
+      { name: 'depositor', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'SessionGranted',
+    inputs: [
+      { name: 'vaultId', type: 'uint256', indexed: true },
+      { name: 'agent', type: 'address', indexed: true },
+      { name: 'maxSpendPerSecond', type: 'uint256', indexed: false },
+      { name: 'maxSpendTotal', type: 'uint256', indexed: false },
+      { name: 'expiresAtSec', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'SessionRevoked',
+    inputs: [
+      { name: 'vaultId', type: 'uint256', indexed: true },
+      { name: 'agent', type: 'address', indexed: true },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'PaymentExecuted',
+    inputs: [
+      { name: 'vaultId', type: 'uint256', indexed: true },
+      { name: 'agent', type: 'address', indexed: true },
+      { name: 'recipient', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'reasonHash', type: 'bytes32', indexed: false },
+      { name: 'reasonMemo', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'Withdrawn',
+    inputs: [
+      { name: 'vaultId', type: 'uint256', indexed: true },
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  // Errors
+  { type: 'error', name: 'NotVaultOwner', inputs: [] },
+  { type: 'error', name: 'VaultNotFound', inputs: [] },
+  { type: 'error', name: 'SessionNotFound', inputs: [] },
+  { type: 'error', name: 'SessionExpired', inputs: [] },
+  { type: 'error', name: 'SessionAlreadyExists', inputs: [] },
+  { type: 'error', name: 'ExceedsRateLimit', inputs: [] },
+  { type: 'error', name: 'ExceedsTotalLimit', inputs: [] },
+  { type: 'error', name: 'InsufficientBalance', inputs: [] },
+  { type: 'error', name: 'ZeroAmount', inputs: [] },
+  { type: 'error', name: 'InvalidAddress', inputs: [] },
+  { type: 'error', name: 'TransferFailed', inputs: [] },
+] as const;
+
+/**
+ * Returns the appropriate vault ABI based on the connected chain.
+ * Falls back to build-time mode check when no chainId is provided.
+ */
+export function getVaultAbi(chainId?: number) {
+  return isHashKeyChain(chainId) || (!chainId && isHashKeyMode())
+    ? HASHKEY_VAULT_ABI
+    : SAFEFLOW_VAULT_ABI;
+}
+
+/**
+ * Returns the contract address for the connected chain.
+ * HashKey chains use NEXT_PUBLIC_HASHKEY_CONTRACT; others use NEXT_PUBLIC_SAFEFLOW_CONTRACT.
+ */
+export function getSafeFlowAddress(chainId?: number): `0x${string}` {
+  const useHashKey = isHashKeyChain(chainId) || (!chainId && isHashKeyMode());
+
+  if (useHashKey) {
+    const addr = process.env.NEXT_PUBLIC_HASHKEY_CONTRACT;
+    if (!addr || addr === '0x0000000000000000000000000000000000000000') {
+      throw new Error('HashKey contract address not configured. Set NEXT_PUBLIC_HASHKEY_CONTRACT in .env.local');
+    }
+    return addr as `0x${string}`;
+  }
   const addr = process.env.NEXT_PUBLIC_SAFEFLOW_CONTRACT;
   if (!addr || addr === '0x0000000000000000000000000000000000000000') {
     throw new Error('SafeFlow contract address not configured. Set NEXT_PUBLIC_SAFEFLOW_CONTRACT in .env.local');

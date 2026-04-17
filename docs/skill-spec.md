@@ -1,124 +1,134 @@
 ---
-name: safeflow-evm-yield
+name: safeflow-hashkey-payment
 description: >
-  SafeFlow Yield Agent skill for AI-powered DeFi yield management on EVM chains.
-  Use this skill whenever the user or an AI agent wants to: discover yield vaults
-  across DeFi protocols, deposit tokens into yield vaults through SafeFlow's
-  on-chain security guardrails, check portfolio positions, analyze yield strategies,
-  or manage SessionCap spending policies. Also trigger when the user mentions
-  "SafeFlow", "yield agent", "vault discovery", "earn API", "LI.FI earn",
-  "deposit into vault", "session cap", "agent wallet", "DeFi yield management",
-  or asks about safe/guarded AI agent DeFi operations. This skill covers both
-  the on-chain contract interaction (SafeFlowVault.sol) and the off-chain
-  orchestration (LI.FI Earn API, audit trail, CLI).
+  SafeFlow HashKey Payment Agent skill for AI-powered payment execution on
+  HashKey Chain, integrated with the HashKey Settlement Protocol (HSP). Use
+  this skill whenever the user or an AI agent wants to: create payment intents
+  via HSP, execute on-chain payments on HashKey Chain, claim and fulfill
+  PaymentIntents, check payment status, or manage SessionCap spending policies
+  for payment agents. Also trigger when the user mentions "SafeFlow",
+  "HashKey", "HSP", "HashKey Settlement Protocol", "PaymentIntent", "HSK",
+  "HashKey Chain", "merchant payment", "session cap", "agent wallet", or asks
+  about safe/guarded AI agent payment operations on HashKey. This skill covers
+  both the on-chain contract interaction (SafeFlowVaultHashKey.sol) and the
+  off-chain orchestration (HSP API, Producer API, audit trail).
 ---
 
-# SafeFlow EVM Yield Agent
+# SafeFlow HashKey Payment Agent
 
-SafeFlow is an on-chain fund management protocol that lets AI agents execute DeFi yield strategies on behalf of users — with strict spending limits enforced by Solidity smart contracts.
+SafeFlow is an on-chain fund management protocol on **HashKey Chain** that lets AI agents execute payments on behalf of users — with strict spending limits enforced by Solidity smart contracts and integrated with the **HashKey Settlement Protocol (HSP)**.
 
 ## Architecture Overview
 
-```
+```text
 User / External AI Agent
   ↓
 SafeFlow Skill (this file)
   ↓
-┌─────────────────────────────────────────────────┐
-│  LI.FI Earn API     → Vault discovery & portfolio │
-│  LI.FI Composer API → Transaction building         │
-│  SafeFlowVault.sol  → On-chain execution + caps    │
-│  Audit API           → Evidence recording           │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  HSP API              → PaymentIntent creation       │
+│  Producer API         → Intent queue + coordination  │
+│  SafeFlowVaultHashKey → On-chain payment + caps      │
+│  Audit API            → Evidence recording            │
+└─────────────────────────────────────────────────────┘
 ```
 
 ## Core Concepts
 
-### SafeFlowVault Contract
+### SafeFlowVaultHashKey Contract
 
-A single Solidity contract at `contracts/src/SafeFlowVault.sol` that manages:
+A single Solidity contract at `contracts/src/SafeFlowVaultHashKey.sol` deployed to HashKey Chain, managing:
 
-- **Wallets** — Users create wallets and deposit ERC-20 tokens
-- **SessionCaps** — Owner grants an agent address permission to spend, bounded by:
+- **Wallets** — Users create wallets and deposit HSK or ERC-20 tokens
+- **SessionCaps** — Owner grants an agent permission to spend, bounded by:
   - `maxSpendPerInterval` — max tokens agent can spend per time window
   - `maxSpendTotal` — lifetime spending cap
   - `intervalSeconds` — rate-limit window length
   - `expiresAt` — unix timestamp when the cap expires
-- **executeDeposit()** — Agent calls this to deposit into a yield vault. The contract enforces all limits and emits `DepositExecuted` with an `evidenceHash` linking to the audit record.
+- **executePayment()** — Agent calls this to fulfill an HSP PaymentIntent on-chain. The contract enforces all limits and emits `PaymentExecuted` with an `evidenceHash` linking to the audit record.
 
-### LI.FI Earn API (no auth required)
+### HashKey Settlement Protocol (HSP)
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET https://earn.li.fi/v1/earn/vaults` | List all yield vaults |
-| `GET https://earn.li.fi/v1/earn/vaults?chainId={id}` | Filter by chain |
-| `GET https://earn.li.fi/v1/earn/portfolio/{address}/positions` | Portfolio positions |
+HSP is HashKey's merchant payment protocol. SafeFlow uses HSP to create compliant PaymentIntents.
 
-Common query parameters for vault listing:
-- `chainId` — EVM chain ID (8453=Base, 42161=Arbitrum, 1=Ethereum, etc.)
-- `limit` / `offset` — Pagination
+**Base URLs:**
 
-### LI.FI Composer API (requires API key)
+- QA: `https://merchant-qa.hashkeymerchant.com`
+- Production: `https://merchant.hashkeymerchant.com`
+
+**Key endpoints:**
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET https://li.quest/v1/quote` | Build deposit transaction |
+| `POST /v1/orders` | Create PaymentIntent (JWT-signed) |
+| `GET /v1/orders/{orderId}` | Query PaymentIntent status |
+| Webhook | Async payment confirmation |
 
-Required params: `fromChain`, `toChain`, `fromToken`, `toToken`, `fromAddress`, `toAddress`, `fromAmount`. Pass API key via `x-lifi-api-key` header.
+**Authentication:** JWT signed with merchant's secp256k1 private key via ES256K.
+
+### SafeFlow Producer API
+
+REST endpoints coordinating users, HSP, and AI agents (all under `/api/hashkey/`):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/intents` | POST | Create PaymentIntent |
+| `/intents` | GET | List PaymentIntents |
+| `/intents/{id}` | GET | Get single intent |
+| `/intents/{id}/ack` | POST | Agent acknowledges/claims intent |
+| `/intents/{id}/result` | POST | Agent reports execution result |
+| `/intents/next` | GET | Retrieve next pending intent (agent polling) |
+| `/hsp/webhook` | POST | HSP webhook callback (signature verified) |
+| `/hsp/status` | GET | HSP configuration health check |
 
 ### Audit API
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/audit` | GET | List all audit records |
-| `/api/audit` | POST | Create audit entry (reasoning, vault, amount, risk_score) |
+| `/api/audit` | POST | Create audit entry (reasoning, recipient, amount) |
 | `/api/audit` | PATCH | Update entry (txHash, ipfsCid, status) |
 
 The POST returns an `evidenceHash` (SHA-256 of the payload) that gets passed to the contract.
 
 ---
 
-## Workflow: Discover and Deposit into a Vault
+## Workflow: Execute an HSP PaymentIntent
 
-This is the primary workflow an AI agent follows to manage yield on behalf of a user.
+This is the primary workflow an AI agent follows to fulfill a payment on behalf of a user.
 
-### Step 1: Discover Vaults
+### Step 1: Retrieve Pending Intent
 
-Fetch vaults from LI.FI Earn API with optional filters:
+Agent polls the Producer API:
 
 ```bash
-# All transactional vaults on Base
-curl "https://earn.li.fi/v1/earn/vaults?chainId=8453&limit=50"
-
-# From code (TypeScript)
-const res = await fetch('https://earn.li.fi/v1/earn/vaults?chainId=8453&limit=50');
-const { data: vaults } = await res.json();
+curl http://localhost:3000/api/hashkey/intents/next
 ```
 
-Each vault object contains:
-- `address` — Vault contract address
-- `name` — Human-readable name
-- `chainId` / `network` — Chain info
-- `protocol.name` — Protocol (Aave, Compound, etc.)
-- `tags[]` — Categories like "stablecoin", "blue-chip", "lsd"
-- `isTransactional` — Whether deposits are supported
-- `underlyingTokens[]` — Token info (symbol, decimals, address)
-- `analytics.apy.total` / `.base` / `.reward` — APY breakdown
-- `analytics.tvl.usd` — Total value locked
+Response contains intent details:
 
-Filter client-side for best results:
-- Only use vaults where `isTransactional === true`
-- Sort by `analytics.apy.total` descending for highest yield
-- Filter by `tags` for strategy type (stablecoin, blue-chip)
-- Filter by `underlyingTokens[].symbol` for specific assets
+```json
+{
+  "id": "intent-uuid",
+  "hspOrderId": "hsp-order-id",
+  "recipient": "0x...",
+  "token": "0xTokenOrZeroForNative",
+  "amount": "100000000000000000000",
+  "status": "pending",
+  "signature": "0x...",
+  "createdAt": 1712793600000
+}
+```
 
-### Step 2: Analyze and Select
+### Step 2: Acknowledge / Claim Intent
 
-The agent should evaluate vaults based on:
-- **APY** — Higher is better, but verify it's sustainable (check `apy7d`, `apy30d`)
-- **TVL** — Higher TVL generally means lower risk
-- **Protocol reputation** — Prefer well-known protocols
-- **Tags** — Match user's risk appetite (stablecoin = low risk, blue-chip = medium)
+```bash
+curl -X POST http://localhost:3000/api/hashkey/intents/{id}/ack \
+  -H "Content-Type: application/json" \
+  -d '{"agentAddress": "0xAgent"}'
+```
+
+Intent transitions: `pending` → `claimed`.
 
 ### Step 3: Record Audit Evidence
 
@@ -128,73 +138,82 @@ Before executing, record the agent's reasoning:
 curl -X POST http://localhost:3000/api/audit \
   -H "Content-Type: application/json" \
   -d '{
-    "agentAddress": "0xAgentAddress",
-    "action": "deposit",
-    "vault": "0xVaultAddress",
-    "vaultName": "Aave USDC Base",
-    "token": "USDC",
-    "amount": "500000000",
-    "reasoning": "Selected highest APY stablecoin vault on Base with TVL > $10M",
-    "riskScore": 2
+    "agentAddress": "0xAgent",
+    "action": "payment",
+    "intentId": "intent-uuid",
+    "recipient": "0xRecipient",
+    "token": "HSK",
+    "amount": "100000000000000000000",
+    "reasoning": "Fulfilling verified HSP PaymentIntent for merchant X"
   }'
 ```
 
 Response includes `evidenceHash` — save this for the contract call.
 
-### Step 4: Build Transaction via Composer
+### Step 4: Execute via SafeFlowVaultHashKey Contract
 
-```bash
-curl "https://li.quest/v1/quote?fromChain=8453&toChain=8453&fromToken=0xUSDC&toToken=0xVaultToken&fromAddress=0xAgent&toAddress=0xAgent&fromAmount=500000000" \
-  -H "x-lifi-api-key: YOUR_KEY"
-```
-
-The response contains `transactionRequest` with `to`, `data`, `value`, `gasLimit`.
-
-### Step 5: Execute via SafeFlow Contract
-
-Call `executeDeposit()` on the SafeFlowVault contract:
+Call `executePayment()` on the HashKey Chain contract:
 
 ```solidity
-function executeDeposit(
-    uint256 capId,        // SessionCap ID
-    address token,        // ERC-20 token address
-    uint256 amount,       // Amount in token's smallest unit
-    address vault,        // Target vault address
-    bytes32 evidenceHash, // From audit API
-    bytes calldata callData // From Composer transactionRequest.data
+function executePayment(
+    uint256 capId,         // SessionCap ID
+    address token,         // Token address (address(0) for native HSK)
+    uint256 amount,        // Amount in token's smallest unit
+    address recipient,     // Payment recipient
+    bytes32 evidenceHash,  // From audit API
+    bytes32 intentId       // HSP intent identifier
 ) external;
 ```
 
-Using ethers.js / viem:
+Using viem:
 
 ```typescript
-import { encodeFunctionData } from 'viem';
+import { createWalletClient, http } from 'viem';
+import { HashKeyTestnet } from './chains'; // chain id 133
 
 const tx = await walletClient.writeContract({
-  address: SAFEFLOW_CONTRACT,
-  abi: SAFEFLOW_VAULT_ABI,
-  functionName: 'executeDeposit',
-  args: [capId, tokenAddress, amount, vaultAddress, evidenceHash, composerCallData],
+  address: SAFEFLOW_HASHKEY_CONTRACT,
+  abi: SAFEFLOW_VAULT_HASHKEY_ABI,
+  functionName: 'executePayment',
+  args: [capId, tokenAddress, amount, recipient, evidenceHash, intentId],
 });
 ```
 
-### Step 6: Update Audit Record
+### Step 5: Report Result to Producer API
 
 ```bash
-curl -X PATCH http://localhost:3000/api/audit \
+curl -X POST http://localhost:3000/api/hashkey/intents/{id}/result \
   -H "Content-Type: application/json" \
-  -d '{"id": "audit-entry-id", "txHash": "0x...", "status": "executed"}'
+  -d '{
+    "txHash": "0x...",
+    "status": "executed",
+    "blockNumber": 12345
+  }'
 ```
+
+Intent transitions: `claimed` → `executed`.
+
+### Step 6: HSP Webhook Confirms Settlement
+
+HashKey Settlement Protocol sends an async webhook to `/api/hashkey/hsp/webhook`. The Producer API:
+
+1. Verifies the webhook signature
+2. Updates intent status: `executed` → `confirmed`
+3. Records final settlement state
 
 ---
 
-## Workflow: Check Portfolio
+## Workflow: Check Payment Status
 
 ```bash
-curl "https://earn.li.fi/v1/earn/portfolio/0xWalletAddress/positions"
+# By SafeFlow intent ID
+curl http://localhost:3000/api/hashkey/intents/{id}
+
+# By HSP order ID
+curl http://localhost:3000/api/hashkey/intents?hspOrderId=xxx
 ```
 
-Returns array of position objects with vault info, balance, and PnL.
+Status values: `pending`, `claimed`, `executed`, `confirmed`, `failed`, `cancelled`.
 
 ---
 
@@ -204,14 +223,14 @@ Returns array of position objects with vault info, balance, and PnL.
 
 ```typescript
 const tx = await walletClient.writeContract({
-  address: SAFEFLOW_CONTRACT,
-  abi: SAFEFLOW_VAULT_ABI,
+  address: SAFEFLOW_HASHKEY_CONTRACT,
+  abi: SAFEFLOW_VAULT_HASHKEY_ABI,
   functionName: 'createSessionCap',
   args: [
     walletId,           // uint256 — which wallet
-    agentAddress,       // address — agent that gets permission
-    maxSpendPerInterval,// uint64  — e.g., 1000e6 for 1000 USDC
-    maxSpendTotal,      // uint256 — e.g., 5000e6 for 5000 USDC lifetime
+    agentAddress,       // address — agent granted permission
+    maxSpendPerInterval,// uint64  — e.g., 100e18 for 100 HSK
+    maxSpendTotal,      // uint256 — e.g., 1000e18 for 1000 HSK lifetime
     intervalSeconds,    // uint64  — e.g., 3600 for 1 hour
     expiresAt,          // uint64  — unix timestamp
   ],
@@ -222,8 +241,8 @@ const tx = await walletClient.writeContract({
 
 ```typescript
 const [intervalRemaining, totalRemaining] = await publicClient.readContract({
-  address: SAFEFLOW_CONTRACT,
-  abi: SAFEFLOW_VAULT_ABI,
+  address: SAFEFLOW_HASHKEY_CONTRACT,
+  abi: SAFEFLOW_VAULT_HASHKEY_ABI,
   functionName: 'getRemainingAllowance',
   args: [capId],
 });
@@ -233,8 +252,8 @@ const [intervalRemaining, totalRemaining] = await publicClient.readContract({
 
 ```typescript
 await walletClient.writeContract({
-  address: SAFEFLOW_CONTRACT,
-  abi: SAFEFLOW_VAULT_ABI,
+  address: SAFEFLOW_HASHKEY_CONTRACT,
+  abi: SAFEFLOW_VAULT_HASHKEY_ABI,
   functionName: 'revokeSessionCap',
   args: [capId],
 });
@@ -242,34 +261,13 @@ await walletClient.writeContract({
 
 ---
 
-## CLI Quick Reference
+## HashKey Chain Network Details
 
-The `safeflow` CLI provides terminal access to the same capabilities:
-
-```bash
-# Discover vaults
-safeflow vault list --chain base --token USDC --min-apy 5 --limit 10
-
-# Vault details
-safeflow info 0xVaultAddress --chain base
-
-# Portfolio
-safeflow portfolio 0xWalletAddress
-```
-
----
-
-## Chain IDs
-
-| Chain | ID |
-|-------|-----|
-| Ethereum | 1 |
-| Arbitrum | 42161 |
-| Base | 8453 |
-| Optimism | 10 |
-| Polygon | 137 |
-| BSC | 56 |
-| Avalanche | 43114 |
+| Network | Chain ID | RPC | Explorer |
+|---------|----------|-----|----------|
+| HashKey Chain Mainnet | 177 | `https://mainnet.hsk.xyz` | `https://hashkey.blockscout.com` |
+| HashKey Chain Testnet | 133 | `https://testnet.hsk.xyz` | `https://testnet-explorer.hsk.xyz` |
+| HashKey Fork Local | 31338 | `http://127.0.0.1:8546` | — |
 
 ---
 
@@ -280,11 +278,11 @@ See `references/abi.json` for the full ABI. Key functions:
 | Function | Caller | Purpose |
 |----------|--------|---------|
 | `createWallet()` | Owner | Create a new agent wallet |
-| `deposit(walletId, token, amount)` | Owner | Deposit ERC-20 tokens |
+| `deposit(walletId, token, amount)` | Owner | Deposit HSK or ERC-20 |
 | `withdraw(walletId, token, amount)` | Owner | Withdraw tokens |
 | `createSessionCap(...)` | Owner | Grant agent spending permission |
 | `revokeSessionCap(capId)` | Owner | Revoke agent permission |
-| `executeDeposit(...)` | Agent | Execute vault deposit within caps |
+| `executePayment(...)` | Agent | Execute HSP payment within caps |
 | `getBalance(walletId, token)` | Anyone | Check wallet balance |
 | `getSessionCap(capId)` | Anyone | Read cap details |
 | `getRemainingAllowance(capId)` | Anyone | Check remaining spend budget |
@@ -306,9 +304,11 @@ The contract reverts with typed errors:
 | `SessionCapNotActive()` | Cap has been revoked |
 
 When an error occurs, the agent should:
-1. Log the error to the audit API with `status: "failed"`
-2. Inform the user with a clear explanation
-3. Suggest corrective action (e.g., "Ask the wallet owner to increase your spending limit")
+
+1. POST to `/api/hashkey/intents/{id}/result` with `status: "failed"` and the error reason
+2. Log the error to the audit API
+3. Inform the user with a clear explanation
+4. Suggest corrective action (e.g., "Ask the wallet owner to increase your spending limit")
 
 ---
 
@@ -320,9 +320,12 @@ The design enforces a strict separation between the human owner and the AI agent
 - **Agent** executes within bounds: can only spend up to the granted limits
 - **Evidence** is immutable: every action is recorded with an evidenceHash on-chain
 - **Revocation** is instant: owner can revoke any SessionCap at any time
+- **HSP-Verified**: Every PaymentIntent originates from HashKey Settlement Protocol with merchant signature
 
 This means an AI agent can never:
+
 - Spend more than the owner authorized
 - Spend after the cap expires
 - Modify its own limits
 - Access funds from other wallets
+- Execute payments not backed by a verified HSP intent

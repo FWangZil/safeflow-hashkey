@@ -143,8 +143,62 @@ export const CHAIN_IDS: Record<string, number> = {
   polygon: 137,
   avalanche: 43114,
   bsc: 56,
+  hashkey_testnet: 133,
+  hashkey_mainnet: 177,
 };
 
 export const CHAIN_NAMES: Record<number, string> = Object.fromEntries(
   Object.entries(CHAIN_IDS).map(([name, id]) => [id, name])
 );
+
+// ─── HashKey mode types ─────────────────────────────────────────────
+
+export type PaymentIntentStatus =
+  | 'pending'
+  | 'claimed'
+  | 'executed'
+  | 'failed'
+  | 'expired'
+  | 'cancelled';
+
+export interface PaymentIntent {
+  intentId: string;
+  merchantOrderId: string;
+  agentAddress: string;
+  vaultId: string;
+  recipient: string;
+  amountWei: string;
+  currency: string;
+  reason: string;
+  metadata?: Record<string, unknown>;
+  expiresAtMs: number;
+  status: PaymentIntentStatus;
+  attemptCount: number;
+  signature: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+  claimedAtMs?: number;
+  txHash?: string;
+  reasonHash?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  finishedAt?: number;
+}
+
+export interface HashKeySessionCapInfo {
+  vaultId: number;
+  agent: string;
+  maxSpendPerSecond: bigint;
+  maxSpendTotal: bigint;
+  totalSpent: bigint;
+  lastSpendTimeSec: number;
+  expiresAtSec: number;
+  exists: boolean;
+}
+
+export interface HashKeyVaultInfo {
+  vaultId: number;
+  owner: string;
+  balance: bigint;
+  exists: boolean;
+}

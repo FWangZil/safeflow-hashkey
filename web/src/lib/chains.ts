@@ -1,7 +1,80 @@
 import { defineChain, type Chain } from 'viem';
 import { arbitrum, arbitrumSepolia, base, baseSepolia, mainnet } from 'wagmi/chains';
+import {
+  HASHKEY_ENABLED,
+  HASHKEY_LOCAL_FORK_ENABLED,
+  HASHKEY_LOCAL_FORK_CHAIN_ID,
+  HASHKEY_LOCAL_FORK_RPC_URL,
+  HASHKEY_LOCAL_FORK_NAME,
+  HASHKEY_LOCAL_FORK_EXPLORER_URL,
+  HASHKEY_TESTNET_CHAIN_ID,
+  HASHKEY_MAINNET_CHAIN_ID,
+  HASHKEY_CHAIN_ID,
+} from './mode';
 
 const BUILTIN_CHAINS = [base, baseSepolia, arbitrum, arbitrumSepolia, mainnet] as const;
+
+// ─── HashKey Chain definitions ──────────────────────────────────────
+
+export const hashkeyTestnet = defineChain({
+  id: HASHKEY_TESTNET_CHAIN_ID,
+  name: 'HashKey Chain Testnet',
+  nativeCurrency: { name: 'HSK', symbol: 'HSK', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://testnet.hsk.xyz'] },
+    public: { http: ['https://testnet.hsk.xyz'] },
+  },
+  blockExplorers: {
+    default: {
+      name: 'HashKey Explorer',
+      url: 'https://testnet-explorer.hsk.xyz',
+    },
+  },
+  testnet: true,
+});
+
+export const hashkeyMainnet = defineChain({
+  id: HASHKEY_MAINNET_CHAIN_ID,
+  name: 'HashKey Chain',
+  nativeCurrency: { name: 'HSK', symbol: 'HSK', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://mainnet.hsk.xyz'] },
+    public: { http: ['https://mainnet.hsk.xyz'] },
+  },
+  blockExplorers: {
+    default: {
+      name: 'HashKey Explorer',
+      url: 'https://hashkey.blockscout.com',
+    },
+  },
+});
+
+// ─── HashKey local fork chain ────────────────────────────────────
+
+export const localHashKeyForkChain = defineChain({
+  id: HASHKEY_LOCAL_FORK_CHAIN_ID,
+  name: HASHKEY_LOCAL_FORK_NAME,
+  nativeCurrency: { name: 'HSK', symbol: 'HSK', decimals: 18 },
+  rpcUrls: {
+    default: { http: [HASHKEY_LOCAL_FORK_RPC_URL] },
+    public: { http: [HASHKEY_LOCAL_FORK_RPC_URL] },
+  },
+  blockExplorers: HASHKEY_LOCAL_FORK_EXPLORER_URL
+    ? { default: { name: 'Local Explorer', url: HASHKEY_LOCAL_FORK_EXPLORER_URL } }
+    : undefined,
+});
+
+function buildHashKeyChains(): Chain[] {
+  const ordered: Chain[] = HASHKEY_CHAIN_ID === HASHKEY_MAINNET_CHAIN_ID
+    ? [hashkeyMainnet, hashkeyTestnet]
+    : [hashkeyTestnet, hashkeyMainnet];
+  if (HASHKEY_LOCAL_FORK_ENABLED) {
+    return [localHashKeyForkChain, ...ordered];
+  }
+  return ordered;
+}
+
+const HASHKEY_CHAINS: Chain[] = buildHashKeyChains();
 
 type WalletChains = [Chain, ...Chain[]];
 
@@ -41,9 +114,24 @@ export const localBaseForkChain = defineChain({
     : undefined,
 });
 
-export const walletChains: WalletChains = LOCAL_FORK_ENABLED
-  ? [localBaseForkChain, ...BUILTIN_CHAINS]
-  : [...BUILTIN_CHAINS];
+function buildWalletChains(): WalletChains {
+  const chains: Chain[] = [];
+
+  // Base local fork (if enabled)
+  if (LOCAL_FORK_ENABLED) chains.push(localBaseForkChain);
+
+  // HashKey chains (if enabled via flag or fork)
+  if (HASHKEY_ENABLED || HASHKEY_LOCAL_FORK_ENABLED) {
+    chains.push(...HASHKEY_CHAINS);
+  }
+
+  // Built-in DeFi chains always available
+  chains.push(...BUILTIN_CHAINS);
+
+  return chains as WalletChains;
+}
+
+export const walletChains: WalletChains = buildWalletChains();
 
 export function getSupportedWalletChain(chainId: number): Chain | undefined {
   return walletChains.find(chain => chain.id === chainId);

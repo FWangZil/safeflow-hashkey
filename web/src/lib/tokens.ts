@@ -1,3 +1,5 @@
+import { isHashKeyChain } from './mode';
+
 // LI.FI convention for native ETH (across all EVM chains)
 export const ETH_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
@@ -8,6 +10,9 @@ export interface TokenInfo {
   name: string;
   isNative?: boolean;
 }
+
+// HashKey Chain native token address (LI.FI convention for native tokens)
+export const HSK_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 const COMMON_TOKENS_BY_CHAIN: Record<number, TokenInfo[]> = {
   // Ethereum Mainnet
@@ -37,15 +42,28 @@ const COMMON_TOKENS_BY_CHAIN: Record<number, TokenInfo[]> = {
     { address: ETH_ADDRESS, symbol: 'ETH', decimals: 18, name: 'Ethereum', isNative: true },
     { address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', symbol: 'USDC', decimals: 6, name: 'USD Coin' },
   ],
+  // HashKey Chain Testnet
+  133: [
+    { address: HSK_ADDRESS, symbol: 'HSK', decimals: 18, name: 'HashKey Token', isNative: true },
+  ],
+  // HashKey Chain Mainnet
+  177: [
+    { address: HSK_ADDRESS, symbol: 'HSK', decimals: 18, name: 'HashKey Token', isNative: true },
+  ],
 };
 
 /**
  * Returns common swap-source tokens for a chain, excluding the vault's underlying token
  * so we don't offer "USDC → USDC" swaps.
- * Falls back to Base tokens for unknown chains (e.g., local forks).
+ * Falls back to HashKey tokens for HashKey forks, Base tokens for other unknowns.
  */
 export function getSwapTokensForChain(chainId: number, excludeAddress?: string): TokenInfo[] {
-  const tokens = COMMON_TOKENS_BY_CHAIN[chainId] ?? COMMON_TOKENS_BY_CHAIN[8453];
+  let tokens = COMMON_TOKENS_BY_CHAIN[chainId];
+  if (!tokens) {
+    tokens = isHashKeyChain(chainId)
+      ? COMMON_TOKENS_BY_CHAIN[133]
+      : COMMON_TOKENS_BY_CHAIN[8453];
+  }
   if (!excludeAddress) return tokens;
   return tokens.filter(t => t.address.toLowerCase() !== excludeAddress.toLowerCase());
 }

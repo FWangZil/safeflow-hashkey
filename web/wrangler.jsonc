@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "safeflow-web-lifi",
+	"name": "safeflow-web-hashkey",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2024-12-30",
 	"minify": true,
@@ -18,13 +18,13 @@
 		{
 			"binding": "WORKER_SELF_REFERENCE",
 			// Must match the "name" field above
-			"service": "safeflow-web-lifi"
+			"service": "safeflow-web-hashkey"
 		}
 	],
 	"kv_namespaces": [
 		{
-			"binding": "AUDIT_KV",
-			"id": "1b48918393e94573bd5d66a94e39fbca"
+			"binding": "AUDIT_KV_HASHKEY",
+			"id": "9a97f407f10e4ccc8695bae5e58eb895"
 		}
 	]
 }

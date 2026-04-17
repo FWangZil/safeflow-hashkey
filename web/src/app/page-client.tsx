@@ -2,24 +2,37 @@
 
 import { useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
-import { BarChart3, Droplets, MessageSquare, Settings, TrendingUp } from 'lucide-react';
+import { useAccount, useChainId } from 'wagmi';
+import { BarChart3, CreditCard, Droplets, Key, MessageSquare, Settings, TrendingUp, Wallet } from 'lucide-react';
 import VaultExplorer from '@/components/VaultExplorer';
 import ChatAgent from '@/components/ChatAgent';
 import DepositModal from '@/components/DepositModal';
 import Portfolio from '@/components/Portfolio';
 import SessionManager from '@/components/SessionManager';
+import PaymentHistory from '@/components/PaymentHistory';
+import HspPanel from '@/components/HspPanel';
 import ThemeToggle from '@/components/ThemeToggle';
 import LangToggle from '@/components/LangToggle';
 import { useTranslation } from '@/i18n';
-import { getAppRuntimeMode, LOCAL_FORK_RPC_URL } from '@/lib/chains';
+import { getAppRuntimeMode, LOCAL_FORK_RPC_URL, localHashKeyForkChain, getSupportedWalletChain } from '@/lib/chains';
+import { getModeForChain, isHashKeyChain, HASHKEY_LOCAL_FORK_ENABLED, HASHKEY_LOCAL_FORK_RPC_URL, HASHKEY_TESTNET_CHAIN_ID } from '@/lib/mode';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
 import type { EarnVault, RecallActionData } from '@/types';
 
-type Tab = 'chat' | 'explore' | 'portfolio' | 'settings';
+type Tab = 'chat' | 'explore' | 'portfolio' | 'settings' | 'vault' | 'session' | 'history' | 'hsp';
 
 export default function PageApp() {
+  const chainId = useChainId();
+  const currentMode = getModeForChain(chainId);
+  const hashKeyMode = currentMode === 'hashkey';
   const [activeTab, setActiveTab] = useState<Tab>('chat');
+
+  // Reset tab when mode changes due to chain switch
+  const [prevMode, setPrevMode] = useState(currentMode);
+  if (currentMode !== prevMode) {
+    setPrevMode(currentMode);
+    setActiveTab(hashKeyMode ? 'vault' : 'chat');
+  }
   const [selectedVault, setSelectedVault] = useState<EarnVault | null>(null);
   const { t } = useTranslation();
   const { isConnected, address } = useAccount();
@@ -65,23 +78,45 @@ export default function PageApp() {
     }
   };
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const defiTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'chat', label: t('nav.aiAgent'), icon: <MessageSquare className="w-4 h-4" /> },
     { id: 'explore', label: t('nav.explore'), icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'portfolio', label: t('nav.portfolio'), icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'settings', label: t('nav.settings'), icon: <Settings className="w-4 h-4" /> },
   ];
-  const runtimeBadgeTitle = runtimeMode.isLocalFork
+  const hashKeyTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'vault', label: t('hashkey.vault') || 'Vault', icon: <Wallet className="w-4 h-4" /> },
+    { id: 'session', label: t('hashkey.sessions') || 'Sessions', icon: <Key className="w-4 h-4" /> },
+    { id: 'history', label: t('hashkey.history') || 'History', icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'hsp', label: t('hashkey.hsp') || 'HSP', icon: <TrendingUp className="w-4 h-4" /> },
+  ];
+  const tabs = hashKeyMode ? hashKeyTabs : defiTabs;
+  // Determine runtime display based on connected chain
+  const isOnHashKeyFork = HASHKEY_LOCAL_FORK_ENABLED && isHashKeyChain(chainId);
+  const effectiveIsLocalFork = isOnHashKeyFork || runtimeMode.isLocalFork;
+  const effectiveExecName = isOnHashKeyFork ? localHashKeyForkChain.name : runtimeMode.executionChainName;
+  const effectiveSourceName = isOnHashKeyFork
+    ? (getSupportedWalletChain(HASHKEY_TESTNET_CHAIN_ID)?.name || 'HashKey Testnet')
+    : runtimeMode.sourceChainName;
+  const effectiveRpcHost = isOnHashKeyFork
+    ? new URL(HASHKEY_LOCAL_FORK_RPC_URL).host
+    : runtimeMode.rpcHostLabel;
+
+  const runtimeBadgeTitle = effectiveIsLocalFork
     ? t('runtime.badgeTooltipLocal', {
-        executionChain: runtimeMode.executionChainName,
-        sourceChain: runtimeMode.sourceChainName,
-        rpcHost: runtimeMode.rpcHostLabel || t('common.na'),
+        executionChain: effectiveExecName,
+        sourceChain: effectiveSourceName,
+        rpcHost: effectiveRpcHost || t('common.na'),
       })
     : t('runtime.badgeTooltipBase', {
-        executionChain: runtimeMode.executionChainName,
-        sourceChain: runtimeMode.sourceChainName,
+        executionChain: effectiveExecName,
+        sourceChain: effectiveSourceName,
       });
-  const runtimeFooterLabel = runtimeMode.isLocalFork ? t('runtime.footerLocal') : t('runtime.footerBase');
+  const runtimeFooterLabel = isOnHashKeyFork
+    ? t('hashkey.footerRuntime')
+    : runtimeMode.isLocalFork
+      ? t('runtime.footerLocal')
+      : t('runtime.footerBase');
 
   return (
     <div className="min-h-screen flex flex-col relative z-1">
@@ -285,19 +320,68 @@ export default function PageApp() {
             <SessionManager />
           </div>
         )}
+
+        {/* HashKey mode panels */}
+        {activeTab === 'vault' && (
+          <div className="space-y-5 animate-fade-in-up">
+            <div>
+              <h2 className="text-xl font-bold">{t('hashkey.vaultTitle') || 'Vault Management'}</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t('hashkey.vaultSubtitle') || 'Create vaults, deposit HSK, and manage funds'}
+              </p>
+            </div>
+            <SessionManager />
+          </div>
+        )}
+
+        {activeTab === 'session' && (
+          <div className="space-y-5 animate-fade-in-up">
+            <div>
+              <h2 className="text-xl font-bold">{t('hashkey.sessionTitle') || 'Session Caps'}</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t('hashkey.sessionSubtitle') || 'Grant and manage agent session permissions'}
+              </p>
+            </div>
+            <SessionManager />
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-5 animate-fade-in-up">
+            <div>
+              <h2 className="text-xl font-bold">{t('hashkey.historyTitle') || 'Payment History'}</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t('hashkey.historySubtitle') || 'Track payment intents and execution status'}
+              </p>
+            </div>
+            <PaymentHistory />
+          </div>
+        )}
+
+        {activeTab === 'hsp' && (
+          <div className="space-y-5 animate-fade-in-up">
+            <div>
+              <h2 className="text-xl font-bold">{t('hashkey.hspPageTitle') || 'HSP Settlement'}</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t('hashkey.hspPageSubtitle') || 'HashKey Settlement Protocol configuration'}
+              </p>
+            </div>
+            <HspPanel />
+          </div>
+        )}
       </main>
 
       {/* Footer */}
       <footer className="border-t border-border py-3 mt-auto relative z-1">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center gap-1.5 text-[11px] text-muted-foreground/70 sm:flex-row sm:justify-center sm:gap-4">
-          <span>{t('footer.left')}</span>
+          <span>{hashKeyMode ? t('hashkey.footerLeft') : t('footer.left')}</span>
           <span
             title={runtimeBadgeTitle}
             className={runtimeMode.isLocalFork ? 'text-amber-600 dark:text-amber-300/90' : 'text-emerald-600 dark:text-emerald-300/90'}
           >
             {runtimeFooterLabel}
           </span>
-          <span>{t('footer.right')}</span>
+          <span>{hashKeyMode ? t('hashkey.hspPageSubtitle') : t('footer.right')}</span>
         </div>
       </footer>
 

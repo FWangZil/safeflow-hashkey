@@ -15,7 +15,11 @@ bracket_spacing = true
 base = "${BASE_RPC_URL}"
 base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
 arbitrum_sepolia = "${ARBITRUM_SEPOLIA_RPC_URL}"
+hashkey_testnet = "${HASHKEY_TESTNET_RPC_URL}"
+hashkey_mainnet = "${HASHKEY_MAINNET_RPC_URL}"
 
 [etherscan]
 base = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
 base_sepolia = { key = "${BASESCAN_API_KEY}" }
+hashkey_testnet = { key = "${ETHERSCAN_API_KEY}", url = "https://testnet-explorer.hsk.xyz/api" }
+hashkey_mainnet = { key = "${ETHERSCAN_API_KEY}", url = "https://hashkey.blockscout.com/api" }

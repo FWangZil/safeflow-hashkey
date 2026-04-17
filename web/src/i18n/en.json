@@ -235,6 +235,22 @@
     "success": "1000 USDC sent!",
     "error": "Faucet failed"
   },
+  "hashkey": {
+    "vault": "Vault",
+    "sessions": "Sessions",
+    "history": "History",
+    "hsp": "HSP",
+    "vaultTitle": "Vault Management",
+    "vaultSubtitle": "Create vaults, deposit HSK, and manage funds",
+    "sessionTitle": "Session Caps",
+    "sessionSubtitle": "Grant and manage agent session permissions",
+    "historyTitle": "Payment History",
+    "historySubtitle": "Track payment intents and execution status",
+    "hspPageTitle": "HSP Settlement",
+    "hspPageSubtitle": "Powered by HashKey Settlement Protocol",
+    "footerLeft": "SafeFlow · HashKey Chain",
+    "footerRuntime": "Runtime: Local HashKey Fork"
+  },
   "common": {
     "na": "N/A"
   }
