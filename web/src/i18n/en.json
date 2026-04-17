@@ -19,14 +19,14 @@
   },
   "chat": {
     "title": "AI Yield Agent",
-    "subtitle": "Tell me your yield strategy in plain English. I'll find the best vaults and execute deposits securely.",
+    "subtitle": "Tell me your yield strategy in plain English. I'll find the best HashKey Chain vaults and execute deposits securely.",
     "headerTitle": "SafeFlow AI Agent",
-    "headerSubtitle": "LI.FI Earn • SessionCap Protected",
+    "headerSubtitle": "HashKey Chain • SessionCap Protected",
     "online": "Online",
     "welcomeTitle": "SafeFlow Yield Agent",
-    "welcomeSubtitle": "I discover, analyze and execute DeFi yield strategies — with on-chain spending guardrails.",
+    "welcomeSubtitle": "I discover, analyze and execute yield strategies on HashKey Chain — with on-chain spending guardrails.",
     "analyzing": "Analyzing vaults...",
-    "inputPlaceholder": "Ask me anything about DeFi yield...",
+    "inputPlaceholder": "Ask me anything about HashKey Chain yield...",
     "inputFollowUp": "Follow up...",
     "sessionCapNote": "All deposits protected by SessionCap spending limits",
     "setupEyebrow": "SafeFlow setup",
@@ -41,9 +41,9 @@
     "setupReadyDescription": "Your SafeFlow wallet and SessionCap are configured. You're ready to deposit.",
     "openSettingsCta": "Open resource center",
     "quickPrompts": {
-      "stablecoin": "Best stablecoin vaults on Base",
-      "eth": "Top 5 ETH yield opportunities",
-      "safe": "Safest vault with APY above 5%"
+      "stablecoin": "Best stablecoin yields on HashKey Chain",
+      "eth": "HSK staking & liquid-staking opportunities",
+      "safe": "Compliant RWA vaults (silver / tokenized stocks)"
     }
   },
   "explore": {

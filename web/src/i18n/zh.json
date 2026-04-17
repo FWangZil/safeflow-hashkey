@@ -19,14 +19,14 @@
   },
   "chat": {
     "title": "AI 收益代理",
-    "subtitle": "用自然语言告诉我您的收益策略，我会为您找到最佳金库并安全执行存款。",
+    "subtitle": "用自然语言告诉我您的收益策略，我会在 HashKey Chain 上找到最佳金库并安全执行存款。",
     "headerTitle": "SafeFlow AI 代理",
-    "headerSubtitle": "LI.FI Earn • SessionCap 保护",
+    "headerSubtitle": "HashKey Chain • SessionCap 保护",
     "online": "在线",
     "welcomeTitle": "SafeFlow 收益代理",
-    "welcomeSubtitle": "我发现、分析并执行 DeFi 收益策略——具备链上支出防护。",
+    "welcomeSubtitle": "我在 HashKey Chain 上发现、分析并执行收益策略——具备链上支出防护。",
     "analyzing": "正在分析金库...",
-    "inputPlaceholder": "向我询问任何关于 DeFi 收益的问题...",
+    "inputPlaceholder": "向我询问任何关于 HashKey Chain 收益的问题...",
     "inputFollowUp": "继续提问...",
     "sessionCapNote": "所有存款均受 SessionCap 支出限额保护",
     "setupEyebrow": "SafeFlow 设置",
@@ -41,9 +41,9 @@
     "setupReadyDescription": "您的 SafeFlow Wallet 和 SessionCap 已配置完成，可以开始存款。",
     "openSettingsCta": "打开资源中心",
     "quickPrompts": {
-      "stablecoin": "Base 上最佳稳定币金库",
-      "eth": "前 5 个 ETH 收益机会",
-      "safe": "APY 超过 5% 的最安全金库"
+      "stablecoin": "HashKey Chain 上的最佳稳定币收益",
+      "eth": "HSK 质押与流动质押机会",
+      "safe": "合规 RWA 金库（银 / 代币化股票）"
     }
   },
   "explore": {
