@@ -261,6 +261,7 @@
     "hspPageSubtitle": "Powered by HashKey Settlement Protocol",
     "footerLeft": "SafeFlow · HashKey Chain",
     "footerRuntime": "Runtime: Local HashKey Fork",
+    "footerChain": "Runtime: {chain}",
     "paymentHistory": "Payment History",
     "paymentHistoryDesc": "PaymentIntent lifecycle tracking",
     "noIntents": "No payment intents yet",

@@ -93,11 +93,19 @@ export default function PageApp() {
   const tabs = hashKeyMode ? hashKeyTabs : defiTabs;
   // Determine runtime display based on connected chain
   const isOnHashKeyFork = HASHKEY_LOCAL_FORK_ENABLED && isHashKeyChain(chainId);
+  const isOnHashKeyLive = hashKeyMode && !isOnHashKeyFork;
+  const connectedHashKeyChainName = isOnHashKeyLive
+    ? (getSupportedWalletChain(chainId)?.name
+        || getSupportedWalletChain(HASHKEY_TESTNET_CHAIN_ID)?.name
+        || 'HashKey Chain')
+    : undefined;
   const effectiveIsLocalFork = isOnHashKeyFork || runtimeMode.isLocalFork;
-  const effectiveExecName = isOnHashKeyFork ? localHashKeyForkChain.name : runtimeMode.executionChainName;
+  const effectiveExecName = isOnHashKeyFork
+    ? localHashKeyForkChain.name
+    : (connectedHashKeyChainName ?? runtimeMode.executionChainName);
   const effectiveSourceName = isOnHashKeyFork
     ? (getSupportedWalletChain(HASHKEY_TESTNET_CHAIN_ID)?.name || 'HashKey Testnet')
-    : runtimeMode.sourceChainName;
+    : (connectedHashKeyChainName ?? runtimeMode.sourceChainName);
   const effectiveRpcHost = isOnHashKeyFork
     ? new URL(HASHKEY_LOCAL_FORK_RPC_URL).host
     : runtimeMode.rpcHostLabel;
@@ -114,9 +122,11 @@ export default function PageApp() {
       });
   const runtimeFooterLabel = isOnHashKeyFork
     ? t('hashkey.footerRuntime')
-    : runtimeMode.isLocalFork
-      ? t('runtime.footerLocal')
-      : t('runtime.footerBase');
+    : isOnHashKeyLive
+      ? t('hashkey.footerChain', { chain: connectedHashKeyChainName ?? 'HashKey Chain' })
+      : runtimeMode.isLocalFork
+        ? t('runtime.footerLocal')
+        : t('runtime.footerBase');
 
   return (
     <div className="min-h-screen flex flex-col relative z-1">

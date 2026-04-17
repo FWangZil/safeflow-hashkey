@@ -261,6 +261,7 @@
     "hspPageSubtitle": "由 HashKey 结算协议提供支持",
     "footerLeft": "SafeFlow · HashKey 链",
     "footerRuntime": "运行时：本地 HashKey 分叉",
+    "footerChain": "运行时：{chain}",
     "paymentHistory": "支付记录",
     "paymentHistoryDesc": "支付意图生命周期追踪",
     "noIntents": "暂无支付意图",
