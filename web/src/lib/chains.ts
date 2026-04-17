@@ -2,6 +2,7 @@ import { defineChain, type Chain } from 'viem';
 import { arbitrum, arbitrumSepolia, base, baseSepolia, mainnet } from 'wagmi/chains';
 import {
   HASHKEY_ENABLED,
+  HASHKEY_ONLY,
   HASHKEY_LOCAL_FORK_ENABLED,
   HASHKEY_LOCAL_FORK_CHAIN_ID,
   HASHKEY_LOCAL_FORK_RPC_URL,
@@ -116,6 +117,13 @@ export const localBaseForkChain = defineChain({
 
 function buildWalletChains(): WalletChains {
   const chains: Chain[] = [];
+
+  // HashKey-only deployment: expose nothing but HashKey chains so the
+  // wallet defaults to HashKey and the UI starts in HashKey mode.
+  if (HASHKEY_ONLY) {
+    chains.push(...HASHKEY_CHAINS);
+    return chains as WalletChains;
+  }
 
   // Base local fork (if enabled)
   if (LOCAL_FORK_ENABLED) chains.push(localBaseForkChain);

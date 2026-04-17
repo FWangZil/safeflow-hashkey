@@ -8,7 +8,13 @@ export const HASHKEY_MAINNET_CHAIN_ID = 177;
 // When true, HashKey chains appear in the wallet picker.
 // The actual mode is determined at runtime by the connected chain.
 export const HASHKEY_ENABLED =
-  process.env.NEXT_PUBLIC_HASHKEY_ENABLED === 'true';
+  process.env.NEXT_PUBLIC_HASHKEY_ENABLED === 'true' ||
+  process.env.NEXT_PUBLIC_HASHKEY_ONLY === 'true';
+
+// When true, hide all non-HashKey chains from the wallet picker and default
+// the UI to HashKey mode even before a wallet is connected.
+export const HASHKEY_ONLY =
+  process.env.NEXT_PUBLIC_HASHKEY_ONLY === 'true';
 
 // ─── HashKey local fork ───────────────────────────────────────────
 const hashkeyForkRequested =
@@ -56,7 +62,11 @@ export function isDefiMode(): boolean {
 
 /** Determine mode from the connected chain ID. */
 export function getModeForChain(chainId: number | undefined): SafeFlowMode {
-  return isHashKeyChain(chainId) ? 'hashkey' : 'defi';
+  if (isHashKeyChain(chainId)) return 'hashkey';
+  // When running in HashKey-only deployment, default to hashkey UI even if
+  // wallet is not connected (chainId undefined) or on an unknown chain.
+  if (HASHKEY_ONLY) return 'hashkey';
+  return 'defi';
 }
 
 /** Primary HashKey chain id (fork > env > testnet default). */
