@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { Search, ArrowUpDown, Coins, TrendingUp } from 'lucide-react';
 import type { EarnVault } from '@/types';
 import { CHAIN_IDS } from '@/types';
 import { fetchVaults, formatApy, formatTvl, type VaultFilters } from '@/lib/earn-api';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
+import { isHashKeyChain } from '@/lib/mode';
 
 interface VaultExplorerProps {
   onSelectVault?: (vault: EarnVault) => void;
@@ -17,6 +18,8 @@ interface VaultExplorerProps {
 
 export default function VaultExplorer({ onSelectVault, onOpenChat, onOpenSettings }: VaultExplorerProps) {
   const { isConnected } = useAccount();
+  const chainId = useChainId();
+  const onHashKey = isHashKeyChain(chainId);
   const { currentWallets, currentAgentCaps, isHydrated } = useSafeFlowResources();
   const [vaults, setVaults] = useState<EarnVault[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,8 +31,12 @@ export default function VaultExplorer({ onSelectVault, onOpenChat, onOpenSetting
   const [sortBy, setSortBy] = useState<'apy' | 'tvl'>('apy');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const { t } = useTranslation();
-  const needsWalletSetup = isConnected && isHydrated && currentWallets.length === 0;
-  const needsCapSetup = isConnected && isHydrated && currentWallets.length > 0 && currentAgentCaps.length === 0;
+  // The wallet/cap readiness signal comes from queries against the SafeFlowVault
+  // ABI, which doesn't match SafeFlowVaultHashKey. On HashKey chains the setup
+  // happens inline inside HspPayActionCard, so suppress the SessionManager-bound
+  // notice here to avoid pointing users at a dead-end UI.
+  const needsWalletSetup = !onHashKey && isConnected && isHydrated && currentWallets.length === 0;
+  const needsCapSetup = !onHashKey && isConnected && isHydrated && currentWallets.length > 0 && currentAgentCaps.length === 0;
   const hasActiveFilters = Boolean(search) || selectedChain !== 'all' || selectedTag !== 'all' || selectedProtocol !== 'all';
   const shouldShowSetupNotice = needsWalletSetup || needsCapSetup;
 

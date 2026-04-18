@@ -36,6 +36,7 @@ import { HASHKEY_VAULT_ABI } from '@/lib/contracts';
 import { getChainExplorerTxUrl } from '@/lib/chains';
 import { HASHKEY_CHAIN_ID, isHashKeyChain } from '@/lib/mode';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
+import HashKeyVaultSetupPanel from '@/components/HashKeyVaultSetupPanel';
 import type { HspPayActionData } from '@/types';
 
 type PrepareResponse = {
@@ -313,6 +314,17 @@ export default function HspPayActionCard({
             <Wallet className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>{connectionBlocker}</span>
           </div>
+        )}
+
+        {/* Step 0: inline vault + SessionCap setup (HashKey).
+            Auto-hides once everything is ready. Gives users a real UI to call
+            createVault / deposit / grantSession without leaving the chat. */}
+        {onHashKey && HASHKEY_CONFIGURED && isConnected && phase !== 'executed' && (
+          <HashKeyVaultSetupPanel
+            vaultId={vaultId}
+            onVaultIdChange={setVaultId}
+            requiredDepositHsk={amount}
+          />
         )}
 
         {/* Step 1: HSP Cart Mandate */}

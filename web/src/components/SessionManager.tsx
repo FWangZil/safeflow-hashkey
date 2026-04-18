@@ -28,7 +28,7 @@ import {
   LOCAL_FORK_NAME,
   SAFEFLOW_CHAIN_ID,
 } from '@/lib/chains';
-import { HASHKEY_LOCAL_FORK_CHAIN_ID, HASHKEY_LOCAL_FORK_ENABLED } from '@/lib/mode';
+import { HASHKEY_LOCAL_FORK_CHAIN_ID, HASHKEY_LOCAL_FORK_ENABLED, isHashKeyChain, HASHKEY_ONLY } from '@/lib/mode';
 import { useSwitchOrAddChain } from '@/lib/useSwitchOrAddChain';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources, type SafeFlowCapResource, type SafeFlowWalletResource } from '@/lib/safeflow-resources';
@@ -103,6 +103,15 @@ export default function SessionManager() {
   const targetChain = requiredChainId != null ? getSupportedWalletChain(requiredChainId) : undefined;
   const { isSwitchingChain, switchError, switchOrAddChain } = useSwitchOrAddChain(targetChain, requiredChainId ?? chainId ?? 1);
   const isWrongExecutionChain = requiredChainId != null && chainId !== requiredChainId;
+  // When the user is connected to (or the deployment targets) a HashKey chain,
+  // the vault at CONTRACT_ADDRESS is SafeFlowVaultHashKey, which exposes
+  // createVault()/grantSession(...) — not createWallet(string)/createSessionCap(...).
+  // Hide the DeFi-shaped forms here and redirect users to the HSP payment flow.
+  const isHashKeyContext =
+    isHashKeyChain(chainId) ||
+    isHashKeyChain(requiredChainId) ||
+    HASHKEY_LOCAL_FORK_ENABLED ||
+    HASHKEY_ONLY;
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
   const [lastCreatedWalletId, setLastCreatedWalletId] = useState('');
   const [lastCreatedCapId, setLastCreatedCapId] = useState('');
@@ -748,6 +757,21 @@ export default function SessionManager() {
     );
   }
 
+  function renderHashKeyNotice() {
+    return (
+      <div className="sm:col-span-2 rounded-[1.5rem] border border-primary/25 bg-primary/10 p-5 text-sm text-primary glow-border">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          <div className="space-y-2">
+            <h3 className="text-base font-semibold text-foreground">{t('settings.hashkeyNoticeTitle')}</h3>
+            <p className="leading-relaxed text-muted-foreground">{t('settings.hashkeyNoticeBody')}</p>
+            <p className="leading-relaxed text-muted-foreground">{t('settings.hashkeyNoticeCta')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderCapFormUI() {
     return (
       <>
@@ -1052,7 +1076,15 @@ export default function SessionManager() {
           <span className="font-data text-muted-foreground">{CONTRACT_ADDRESS.slice(0, 6)}...{CONTRACT_ADDRESS.slice(-4)}</span>
         )}
       </div>
-      {renderCapFormUI()}
+      {isHashKeyContext ? (
+        <>
+          {renderHashKeyNotice()}
+          {renderResourceCenter()}
+          {renderResourceLibrary()}
+        </>
+      ) : (
+        renderCapFormUI()
+      )}
     </div>
   );
 }

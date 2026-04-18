@@ -41,8 +41,12 @@ export default function PageApp() {
   const [pendingChatMessage, setPendingChatMessage] = useState<string>('');
   const [pendingRecallData, setPendingRecallData] = useState<RecallActionData | undefined>();
   const runtimeMode = getAppRuntimeMode();
-  const needsWalletSetup = isConnected && currentWallets.length === 0;
-  const needsCapSetup = isConnected && currentWallets.length > 0 && currentAgentCaps.length === 0;
+  // The wallet/cap readiness signal comes from queries against the SafeFlowVault
+  // ABI, which doesn't match SafeFlowVaultHashKey. On HashKey chains the setup
+  // happens inline inside HspPayActionCard, so suppress the SessionManager-bound
+  // banner here to avoid pointing users at a dead-end UI.
+  const needsWalletSetup = !hashKeyMode && isConnected && currentWallets.length === 0;
+  const needsCapSetup = !hashKeyMode && isConnected && currentWallets.length > 0 && currentAgentCaps.length === 0;
   const showSetupBanner = activeTab !== 'settings' && (needsWalletSetup || needsCapSetup);
 
   const handleSelectVault = (vault: EarnVault) => {

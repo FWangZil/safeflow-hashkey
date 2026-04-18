@@ -33,10 +33,15 @@ export default function ChatAgent({ onSelectVault, onOpenSettings, initialMessag
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const needsWalletSetup = isConnected && isHydrated && currentWallets.length === 0;
-  const needsCapSetup = isConnected && isHydrated && currentWallets.length > 0 && currentAgentCaps.length === 0;
+  // The DeFi-shape wallet/cap readiness signal comes from queries against the
+  // SafeFlowVault ABI, which doesn't match SafeFlowVaultHashKey. On HashKey
+  // chains the vault/session setup happens inline inside HspPayActionCard
+  // (see HashKeyVaultSetupPanel), so suppress the SessionManager-bound setup
+  // card there to avoid pointing users at a dead-end UI.
+  const needsWalletSetup = !onHashKey && isConnected && isHydrated && currentWallets.length === 0;
+  const needsCapSetup = !onHashKey && isConnected && isHydrated && currentWallets.length > 0 && currentAgentCaps.length === 0;
   const showSetupCard = needsWalletSetup || needsCapSetup;
-  const showReadyCard = isConnected && isHydrated && !needsWalletSetup && !needsCapSetup;
+  const showReadyCard = !onHashKey && isConnected && isHydrated && !needsWalletSetup && !needsCapSetup;
 
   const QUICK_PROMPTS = useMemo(() => {
     if (onHashKey) {
