@@ -154,7 +154,7 @@ export default function PaymentHistory() {
                     <span className="font-mono">{shortenAddress(intent.recipient)}</span>
                   </div>
                   <div>
-                    <span className="font-medium text-foreground/70">{t('hashkey.vault')}:</span>{' '}
+                    <span className="font-medium text-foreground/70">{t('hashkey.vaultLabel')}:</span>{' '}
                     #{intent.vaultId}
                   </div>
                   {intent.reason && (

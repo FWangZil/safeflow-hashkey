@@ -247,14 +247,12 @@
     "error": "Faucet failed"
   },
   "hashkey": {
-    "vault": "Vault",
-    "sessions": "Sessions",
+    "safeflow": "SafeFlow",
     "history": "History",
     "hsp": "HSP",
-    "vaultTitle": "Vault Management",
-    "vaultSubtitle": "Create vaults, deposit HSK, and manage funds",
-    "sessionTitle": "Session Caps",
-    "sessionSubtitle": "Grant and manage agent session permissions",
+    "safeflowTitle": "SafeFlow Vault & SessionCaps",
+    "safeflowSubtitle": "Create vaults, deposit HSK, and grant rate-limited SessionCaps to AI agents \u2014 all in one place.",
+    "vaultLabel": "Vault",
     "historyTitle": "Payment History",
     "historySubtitle": "Track payment intents and execution status",
     "hspPageTitle": "HSP Settlement",

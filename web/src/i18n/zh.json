@@ -247,14 +247,12 @@
     "error": "水龙头出错"
   },
   "hashkey": {
-    "vault": "金库",
-    "sessions": "会话",
+    "safeflow": "SafeFlow",
     "history": "支付记录",
     "hsp": "HSP",
-    "vaultTitle": "金库管理",
-    "vaultSubtitle": "创建金库、存入 HSK、管理资金",
-    "sessionTitle": "会话权限",
-    "sessionSubtitle": "授予和管理代理会话权限",
+    "safeflowTitle": "SafeFlow 金库 & 会话权限",
+    "safeflowSubtitle": "一站式管理：创建金库、存入 HSK，并给 AI 代理签发限额的 SessionCap。",
+    "vaultLabel": "金库",
     "historyTitle": "支付记录",
     "historySubtitle": "追踪支付意图和执行状态",
     "hspPageTitle": "HSP 结算",

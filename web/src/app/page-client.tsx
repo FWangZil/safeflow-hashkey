@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useChainId } from 'wagmi';
-import { BarChart3, CreditCard, Droplets, Key, MessageSquare, Settings, TrendingUp, Wallet } from 'lucide-react';
+import { BarChart3, CreditCard, Droplets, MessageSquare, Settings, ShieldCheck, TrendingUp } from 'lucide-react';
 import VaultExplorer from '@/components/VaultExplorer';
 import ChatAgent from '@/components/ChatAgent';
 import DepositModal from '@/components/DepositModal';
@@ -19,7 +19,7 @@ import { getModeForChain, isHashKeyChain, HASHKEY_LOCAL_FORK_ENABLED, HASHKEY_LO
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
 import type { EarnVault, RecallActionData } from '@/types';
 
-type Tab = 'chat' | 'explore' | 'portfolio' | 'settings' | 'vault' | 'session' | 'history' | 'hsp';
+type Tab = 'chat' | 'explore' | 'portfolio' | 'settings' | 'safeflow' | 'history' | 'hsp';
 
 export default function PageApp() {
   const chainId = useChainId();
@@ -31,7 +31,7 @@ export default function PageApp() {
   const [prevMode, setPrevMode] = useState(currentMode);
   if (currentMode !== prevMode) {
     setPrevMode(currentMode);
-    setActiveTab(hashKeyMode ? 'vault' : 'chat');
+    setActiveTab(hashKeyMode ? 'safeflow' : 'chat');
   }
   const [selectedVault, setSelectedVault] = useState<EarnVault | null>(null);
   const { t } = useTranslation();
@@ -86,8 +86,7 @@ export default function PageApp() {
   ];
   const hashKeyTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'chat', label: t('nav.aiAgent'), icon: <MessageSquare className="w-4 h-4" /> },
-    { id: 'vault', label: t('hashkey.vault'), icon: <Wallet className="w-4 h-4" /> },
-    { id: 'session', label: t('hashkey.sessions'), icon: <Key className="w-4 h-4" /> },
+    { id: 'safeflow', label: t('hashkey.safeflow'), icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'history', label: t('hashkey.history'), icon: <CreditCard className="w-4 h-4" /> },
     { id: 'hsp', label: t('hashkey.hsp'), icon: <TrendingUp className="w-4 h-4" /> },
   ];
@@ -333,24 +332,12 @@ export default function PageApp() {
         )}
 
         {/* HashKey mode panels */}
-        {activeTab === 'vault' && (
+        {activeTab === 'safeflow' && (
           <div className="space-y-5 animate-fade-in-up">
             <div>
-              <h2 className="text-xl font-bold">{t('hashkey.vaultTitle')}</h2>
+              <h2 className="text-xl font-bold">{t('hashkey.safeflowTitle')}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {t('hashkey.vaultSubtitle')}
-              </p>
-            </div>
-            <SessionManager />
-          </div>
-        )}
-
-        {activeTab === 'session' && (
-          <div className="space-y-5 animate-fade-in-up">
-            <div>
-              <h2 className="text-xl font-bold">{t('hashkey.sessionTitle')}</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {t('hashkey.sessionSubtitle')}
+                {t('hashkey.safeflowSubtitle')}
               </p>
             </div>
             <SessionManager />
