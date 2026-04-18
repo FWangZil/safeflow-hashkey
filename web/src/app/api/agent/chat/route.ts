@@ -42,15 +42,21 @@ IMPORTANT: When you identify that the user wants to search for vaults, include a
 When the user asks to recall/withdraw funds from a DeFi vault back to SafeFlow, include:
 <tool_call>{"action":"recall","walletId":"1","token":"USDC","vaultName":"vault name here"}</tool_call>
 
+When the user wants you to PAY a specific amount of HSK (HashKey native token) to an address — e.g. "pay 0.05 HSK to 0xabc..." / "付 0.05 HSK 给 0xabc..." / "send 0.1 HSK to alice at 0x..." — you MUST emit a payment tool call that will trigger the on-chain demo flow through the HashKey Settlement Protocol (HSP). The card will build a HSP Cart Mandate, pin its hash on-chain and execute the payment via SafeFlowVaultHashKey.executePayment under the user's SessionCap:
+<tool_call>{"action":"hsp_pay","amount":"0.05","recipient":"0x0000000000000000000000000000000000000000","reason":"coffee"}</tool_call>
+
 Only include fields that the user explicitly mentioned. Valid fields:
-- action: "search_vaults" | "deposit" | "recall" | "portfolio"
+- action: "search_vaults" | "deposit" | "recall" | "portfolio" | "hsp_pay"
 - chainId: number (1=Ethereum, 8453=Base, 42161=Arbitrum, 10=Optimism, 137=Polygon)
 - token: string (USDC, ETH, WBTC, etc.)
 - tag: "stablecoin" | "blue-chip" | "lsd"
 - minApy: number
 - limit: number (default 5)
 - walletId: string (for recall)
-- vaultName: string (for recall)`;
+- vaultName: string (for recall)
+- amount: string (for hsp_pay, in HSK, e.g. "0.05")
+- recipient: string (for hsp_pay, 0x-prefixed 20-byte address)
+- reason: string (for hsp_pay, short human memo)`;
 
 // ─── Route Handler ──────────────────────────────────────────
 
@@ -149,6 +155,20 @@ async function handleWithLLM(
           action: { type: 'deposit', token: toolCall.token },
         });
       }
+
+      if (toolCall.action === 'hsp_pay') {
+        const hspAction = buildHspPayAction({
+          amount: toolCall.amount,
+          recipient: toolCall.recipient,
+          reason: toolCall.reason,
+        });
+        if (hspAction) {
+          return NextResponse.json({
+            message: responseText || hspAction.defaultMessage,
+            action: hspAction.action,
+          });
+        }
+      }
     } catch {
       // Tool call parse failed — just return the text
     }
@@ -204,6 +224,15 @@ async function fetchAndFilterVaults(params: {
 // ─── Rule-Based Fallback Handler ────────────────────────────
 
 async function handleWithRules(message: string) {
+  // HSP payment intent takes precedence — it has a very specific shape.
+  const hspIntent = parseHspPayIntent(message);
+  if (hspIntent) {
+    return NextResponse.json({
+      message: hspIntent.defaultMessage,
+      action: hspIntent.action,
+    });
+  }
+
   const intent = parseUserIntent(message);
 
   if (intent.type === 'search_vaults') {
@@ -349,6 +378,68 @@ function parseUserIntent(message: string): UserIntent {
   }
 
   return { type: 'general' };
+}
+
+// ─── HSP Pay Intent ────────────────────────────────────────
+
+type HspPayBuilderInput = { amount?: unknown; recipient?: unknown; reason?: unknown };
+
+function buildHspPayAction(input: HspPayBuilderInput):
+  | { action: { type: 'hsp_pay'; hspPayData: { amount: string; recipient: `0x${string}`; reason?: string } }; defaultMessage: string }
+  | null {
+  const amount = typeof input.amount === 'string' || typeof input.amount === 'number' ? String(input.amount) : '';
+  const recipient = typeof input.recipient === 'string' ? input.recipient : '';
+  const reason = typeof input.reason === 'string' ? input.reason : undefined;
+
+  if (!/^\d+(?:\.\d+)?$/.test(amount) || Number(amount) <= 0) return null;
+  if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) return null;
+
+  const defaultMessage = `I'll build a HashKey Settlement Protocol (HSP) Cart Mandate for **${amount} HSK → \`${recipient.slice(0, 10)}…\`**, pin its hash on-chain, and execute the payment through your SafeFlow SessionCap.`;
+
+  return {
+    action: {
+      type: 'hsp_pay',
+      hspPayData: { amount, recipient: recipient as `0x${string}`, reason },
+    },
+    defaultMessage,
+  };
+}
+
+/**
+ * Detects payment intents of the form:
+ *   "pay 0.05 HSK to 0xabc..."
+ *   "send 0.1 HSK to 0x..."
+ *   "付 0.05 HSK 给 0x..."
+ *   "给 0x... 转 0.02 HSK"
+ * Optional trailing reason after a colon / "for" / "作为" is captured.
+ */
+function parseHspPayIntent(message: string):
+  | { action: { type: 'hsp_pay'; hspPayData: { amount: string; recipient: `0x${string}`; reason?: string } }; defaultMessage: string }
+  | null {
+  const text = message.trim();
+  const addressMatch = text.match(/0x[a-fA-F0-9]{40}/);
+  if (!addressMatch) return null;
+
+  const amountMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:hsk|HSK)/i);
+  if (!amountMatch) return null;
+
+  // Require at least one verb that looks like a payment command to avoid
+  // accidentally firing on unrelated mentions of an amount + an address.
+  if (!/(pay|send|transfer|付|转|给|支付)/i.test(text)) return null;
+
+  let reason: string | undefined;
+  const reasonMatch =
+    text.match(/(?:reason|memo|for|备注|作为|用于)[:：]?\s*([^\n]+)$/i) ||
+    text.match(/[:：]\s*([^\n]+)$/);
+  if (reasonMatch) {
+    reason = reasonMatch[1].trim().slice(0, 80);
+  }
+
+  return buildHspPayAction({
+    amount: amountMatch[1],
+    recipient: addressMatch[0],
+    reason,
+  });
 }
 
 function formatTvlShort(tvlUsd: string | undefined): string {

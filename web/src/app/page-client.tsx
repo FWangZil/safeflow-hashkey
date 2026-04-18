@@ -85,6 +85,7 @@ export default function PageApp() {
     { id: 'settings', label: t('nav.settings'), icon: <Settings className="w-4 h-4" /> },
   ];
   const hashKeyTabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'chat', label: t('nav.aiAgent'), icon: <MessageSquare className="w-4 h-4" /> },
     { id: 'vault', label: t('hashkey.vault'), icon: <Wallet className="w-4 h-4" /> },
     { id: 'session', label: t('hashkey.sessions'), icon: <Key className="w-4 h-4" /> },
     { id: 'history', label: t('hashkey.history'), icon: <CreditCard className="w-4 h-4" /> },

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useAccount } from 'wagmi';
-import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield, RotateCcw } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useAccount, useChainId } from 'wagmi';
+import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield, RotateCcw, CreditCard } from 'lucide-react';
+import { isHashKeyChain } from '@/lib/mode';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage, EarnVault, RecallActionData } from '@/types';
@@ -10,6 +11,7 @@ import { formatApy, formatTvl } from '@/lib/earn-api';
 import { useTranslation } from '@/i18n';
 import { useSafeFlowResources } from '@/lib/safeflow-resources';
 import RecallActionCard from '@/components/RecallActionCard';
+import HspPayActionCard from '@/components/HspPayActionCard';
 
 interface ChatAgentProps {
   onSelectVault?: (vault: EarnVault) => void;
@@ -22,6 +24,8 @@ interface ChatAgentProps {
 export default function ChatAgent({ onSelectVault, onOpenSettings, initialMessage, initialRecallData, onInitialMessageConsumed }: ChatAgentProps) {
   const { t } = useTranslation();
   const { isConnected } = useAccount();
+  const chainId = useChainId();
+  const onHashKey = isHashKeyChain(chainId);
   const { currentWallets, currentAgentCaps, isHydrated } = useSafeFlowResources();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -33,11 +37,20 @@ export default function ChatAgent({ onSelectVault, onOpenSettings, initialMessag
   const showSetupCard = needsWalletSetup || needsCapSetup;
   const showReadyCard = isConnected && isHydrated && !needsWalletSetup && !needsCapSetup;
 
-  const QUICK_PROMPTS = [
-    { icon: <TrendingUp className="w-4 h-4" />, text: t('chat.quickPrompts.stablecoin') },
-    { icon: <Zap className="w-4 h-4" />, text: t('chat.quickPrompts.eth') },
-    { icon: <Shield className="w-4 h-4" />, text: t('chat.quickPrompts.safe') },
-  ];
+  const QUICK_PROMPTS = useMemo(() => {
+    if (onHashKey) {
+      return [
+        { icon: <CreditCard className="w-4 h-4" />, text: 'Pay 0.01 HSK to 0x000000000000000000000000000000000000dEaD for coffee' },
+        { icon: <Shield className="w-4 h-4" />, text: 'Pay 0.05 HSK to 0x000000000000000000000000000000000000dEaD for the HSP demo' },
+        { icon: <Zap className="w-4 h-4" />, text: 'Send 0.1 HSK to 0x000000000000000000000000000000000000dEaD as a merchant settlement' },
+      ];
+    }
+    return [
+      { icon: <TrendingUp className="w-4 h-4" />, text: t('chat.quickPrompts.stablecoin') },
+      { icon: <Zap className="w-4 h-4" />, text: t('chat.quickPrompts.eth') },
+      { icon: <Shield className="w-4 h-4" />, text: t('chat.quickPrompts.safe') },
+    ];
+  }, [onHashKey, t]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -326,6 +339,11 @@ export default function ChatAgent({ onSelectVault, onOpenSettings, initialMessag
                   {/* Recall action card */}
                   {msg.action?.type === 'recall' && msg.action.recallData && (
                     <RecallActionCard {...msg.action.recallData} />
+                  )}
+
+                  {/* HSP payment action card (chat-driven SafeFlow \u00d7 HSP demo) */}
+                  {msg.action?.type === 'hsp_pay' && msg.action.hspPayData && (
+                    <HspPayActionCard {...msg.action.hspPayData} />
                   )}
 
                   <div className="text-[10px] text-muted-foreground/40 px-1 font-data">

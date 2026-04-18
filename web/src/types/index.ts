@@ -113,12 +113,28 @@ export interface ChatMessage {
   retryText?: string;
   retryUserMsgId?: string;
   action?: {
-    type: 'deposit' | 'withdraw' | 'info' | 'recall';
+    type: 'deposit' | 'withdraw' | 'info' | 'recall' | 'hsp_pay';
     vault?: EarnVault;
     amount?: string;
     token?: string;
     recallData?: RecallActionData;
+    hspPayData?: HspPayActionData;
   };
+}
+
+/**
+ * Payload attached to an assistant message when the user asks the agent to
+ * execute a HashKey-native payment through the HSP Settlement Protocol.
+ * The card renderer will (1) build a HSP Cart Mandate via the prepare API,
+ * (2) invoke SafeFlowVaultHashKey.executePayment with the cart hash pinned as
+ * the on-chain `reasonHash`, (3) record the result into the intent store.
+ */
+export interface HspPayActionData {
+  amount: string;      // human-readable amount, e.g. "0.05"
+  recipient: `0x${string}`;
+  reason?: string;
+  coin?: string;       // defaults to HSK
+  currency?: string;   // display currency, defaults to USD
 }
 
 export interface SessionCapInfo {
