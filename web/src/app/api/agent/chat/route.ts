@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatCompletion, resolveLLMConfig, type LLMMessage } from '@/lib/llm';
+import { DEMO_MERCHANTS, findMerchantByAddress, findMerchantById, findMerchantInText, type DemoMerchant } from '@/lib/demo-merchants';
 
 const EARN_API = 'https://earn.li.fi';
 
@@ -42,8 +43,17 @@ IMPORTANT: When you identify that the user wants to search for vaults, include a
 When the user asks to recall/withdraw funds from a DeFi vault back to SafeFlow, include:
 <tool_call>{"action":"recall","walletId":"1","token":"USDC","vaultName":"vault name here"}</tool_call>
 
-When the user wants you to PAY a specific amount of HSK (HashKey native token) to an address — e.g. "pay 0.05 HSK to 0xabc..." / "付 0.05 HSK 给 0xabc..." / "send 0.1 HSK to alice at 0x..." — you MUST emit a payment tool call that will trigger the on-chain demo flow through the HashKey Settlement Protocol (HSP). The card will build a HSP Cart Mandate, pin its hash on-chain and execute the payment via SafeFlowVaultHashKey.executePayment under the user's SessionCap:
-<tool_call>{"action":"hsp_pay","amount":"0.05","recipient":"0x0000000000000000000000000000000000000000","reason":"coffee"}</tool_call>
+When the user wants you to PAY a specific amount of HSK (HashKey native token) to a named merchant or to a raw address, you MUST emit a payment tool call that triggers the on-chain HSP × SafeFlow demo flow. The card will build an HSP Cart Mandate, pin its hash on-chain and execute via SafeFlowVaultHashKey.executePayment under the user's SessionCap.
+Supported inputs — accept ANY of:
+  - English: "pay Alice's Coffee Bar 0.01 HSK for a latte", "send HashKey Demo Store 0.05 HSK", "tip the SafeFlow dev team 0.1 HSK"
+  - Chinese: "付 0.01 HSK 给爱丽丝的咖啡厅", "给 HashKey 商店 转 0.05 HSK"
+  - Raw address: "pay 0.05 HSK to 0xabc..."
+When the user names a merchant instead of an address, put the merchant name in the \`merchant\` field — do NOT invent an address. If the user gives a raw 0x address, put it in \`recipient\`.
+Examples:
+<tool_call>{"action":"hsp_pay","amount":"0.01","merchant":"Alice's Coffee Bar","reason":"latte"}</tool_call>
+<tool_call>{"action":"hsp_pay","amount":"0.05","recipient":"0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC","reason":"API subscription"}</tool_call>
+
+Known demo merchants you can reference by name: ${DEMO_MERCHANTS.map(m => '"' + m.name + '"').join(', ')}.
 
 Only include fields that the user explicitly mentioned. Valid fields:
 - action: "search_vaults" | "deposit" | "recall" | "portfolio" | "hsp_pay"
@@ -55,7 +65,8 @@ Only include fields that the user explicitly mentioned. Valid fields:
 - walletId: string (for recall)
 - vaultName: string (for recall)
 - amount: string (for hsp_pay, in HSK, e.g. "0.05")
-- recipient: string (for hsp_pay, 0x-prefixed 20-byte address)
+- recipient: string (for hsp_pay, 0x-prefixed 20-byte address) — OR use \`merchant\` instead
+- merchant: string (for hsp_pay, a known merchant display name — server will resolve to an address)
 - reason: string (for hsp_pay, short human memo)`;
 
 // ─── Route Handler ──────────────────────────────────────────
@@ -160,6 +171,7 @@ async function handleWithLLM(
         const hspAction = buildHspPayAction({
           amount: toolCall.amount,
           recipient: toolCall.recipient,
+          merchant: toolCall.merchant,
           reason: toolCall.reason,
         });
         if (hspAction) {
@@ -382,24 +394,63 @@ function parseUserIntent(message: string): UserIntent {
 
 // ─── HSP Pay Intent ────────────────────────────────────────
 
-type HspPayBuilderInput = { amount?: unknown; recipient?: unknown; reason?: unknown };
+type HspPayBuilderInput = {
+  amount?: unknown;
+  recipient?: unknown;
+  merchant?: unknown;
+  reason?: unknown;
+};
+
+type HspPayData = {
+  amount: string;
+  recipient: `0x${string}`;
+  recipientName?: string;
+  recipientTagline?: string;
+  recipientEmoji?: string;
+  reason?: string;
+};
 
 function buildHspPayAction(input: HspPayBuilderInput):
-  | { action: { type: 'hsp_pay'; hspPayData: { amount: string; recipient: `0x${string}`; reason?: string } }; defaultMessage: string }
+  | { action: { type: 'hsp_pay'; hspPayData: HspPayData }; defaultMessage: string }
   | null {
   const amount = typeof input.amount === 'string' || typeof input.amount === 'number' ? String(input.amount) : '';
-  const recipient = typeof input.recipient === 'string' ? input.recipient : '';
+  const rawRecipient = typeof input.recipient === 'string' ? input.recipient : '';
+  const merchantHint = typeof input.merchant === 'string' ? input.merchant : '';
   const reason = typeof input.reason === 'string' ? input.reason : undefined;
 
   if (!/^\d+(?:\.\d+)?$/.test(amount) || Number(amount) <= 0) return null;
-  if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) return null;
 
-  const defaultMessage = `I'll build a HashKey Settlement Protocol (HSP) Cart Mandate for **${amount} HSK → \`${recipient.slice(0, 10)}…\`**, pin its hash on-chain, and execute the payment through your SafeFlow SessionCap.`;
+  // Resolution order: (1) merchant hint, (2) raw 0x address, (3) text search
+  // across the whole merchant field. We never invent an address — if we can't
+  // resolve anything, we fail so the chat falls back to asking for clarity.
+  let merchant: DemoMerchant | null = null;
+  let recipientHex: `0x${string}` | '' = '';
+
+  if (merchantHint) {
+    merchant = findMerchantInText(merchantHint) ?? findMerchantById(merchantHint);
+  }
+  if (!merchant && /^0x[a-fA-F0-9]{40}$/.test(rawRecipient)) {
+    recipientHex = rawRecipient as `0x${string}`;
+    merchant = findMerchantByAddress(rawRecipient);
+  }
+  if (merchant) recipientHex = merchant.address;
+
+  if (!recipientHex) return null;
+
+  const display = merchant ? `**${merchant.emoji} ${merchant.name}**` : `\`${recipientHex.slice(0, 10)}…\``;
+  const defaultMessage = `I'll build a HashKey Settlement Protocol (HSP) Cart Mandate for **${amount} HSK → ${display}**, pin its hash on-chain, and execute the payment through your SafeFlow SessionCap.`;
 
   return {
     action: {
       type: 'hsp_pay',
-      hspPayData: { amount, recipient: recipient as `0x${string}`, reason },
+      hspPayData: {
+        amount,
+        recipient: recipientHex,
+        recipientName: merchant?.name,
+        recipientTagline: merchant?.tagline,
+        recipientEmoji: merchant?.emoji,
+        reason,
+      },
     },
     defaultMessage,
   };
@@ -414,30 +465,35 @@ function buildHspPayAction(input: HspPayBuilderInput):
  * Optional trailing reason after a colon / "for" / "作为" is captured.
  */
 function parseHspPayIntent(message: string):
-  | { action: { type: 'hsp_pay'; hspPayData: { amount: string; recipient: `0x${string}`; reason?: string } }; defaultMessage: string }
+  | { action: { type: 'hsp_pay'; hspPayData: HspPayData }; defaultMessage: string }
   | null {
   const text = message.trim();
-  const addressMatch = text.match(/0x[a-fA-F0-9]{40}/);
-  if (!addressMatch) return null;
 
   const amountMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:hsk|HSK)/i);
   if (!amountMatch) return null;
 
   // Require at least one verb that looks like a payment command to avoid
-  // accidentally firing on unrelated mentions of an amount + an address.
-  if (!/(pay|send|transfer|付|转|给|支付)/i.test(text)) return null;
+  // accidentally firing on unrelated mentions of an amount + a merchant.
+  if (!/(pay|send|transfer|tip|donate|付|转|给|支付|打赏|捐)/i.test(text)) return null;
 
+  // Prefer a named merchant, fall back to a raw 0x address.
+  const merchant = findMerchantInText(text);
+  const addressMatch = text.match(/0x[a-fA-F0-9]{40}/);
+  if (!merchant && !addressMatch) return null;
+
+  // Extract a short reason if the user added one ("for coffee", "备注：年会").
   let reason: string | undefined;
   const reasonMatch =
-    text.match(/(?:reason|memo|for|备注|作为|用于)[:：]?\s*([^\n]+)$/i) ||
+    text.match(/(?:\bfor\b|reason|memo|备注|作为|用于)[:：]?\s*([^\n]+)$/i) ||
     text.match(/[:：]\s*([^\n]+)$/);
   if (reasonMatch) {
-    reason = reasonMatch[1].trim().slice(0, 80);
+    reason = reasonMatch[1].trim().replace(/^the\s+/i, '').slice(0, 80);
   }
 
   return buildHspPayAction({
     amount: amountMatch[1],
-    recipient: addressMatch[0],
+    merchant: merchant?.name,
+    recipient: addressMatch?.[0],
     reason,
   });
 }

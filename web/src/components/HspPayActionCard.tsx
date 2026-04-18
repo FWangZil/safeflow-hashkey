@@ -76,7 +76,16 @@ async function copyToClipboard(text: string) {
   }
 }
 
-export default function HspPayActionCard({ amount, recipient, reason, coin, currency }: HspPayActionData) {
+export default function HspPayActionCard({
+  amount,
+  recipient,
+  recipientName,
+  recipientTagline,
+  recipientEmoji,
+  reason,
+  coin,
+  currency,
+}: HspPayActionData) {
   const { address: connectedAddress, isConnected } = useAccount();
   const chainId = useChainId();
   const onHashKey = isHashKeyChain(chainId);
@@ -114,7 +123,14 @@ export default function HspPayActionCard({ amount, recipient, reason, coin, curr
       const res = await fetch('/api/hashkey/hsp-demo/prepare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, recipient, reason, coin, currency }),
+        body: JSON.stringify({
+          amount,
+          recipient,
+          reason,
+          coin,
+          currency,
+          merchantName: recipientName,
+        }),
       });
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
@@ -127,7 +143,7 @@ export default function HspPayActionCard({ amount, recipient, reason, coin, curr
       setErrorMessage(err instanceof Error ? err.message : 'Failed to prepare HSP cart mandate');
       setPhase('error');
     }
-  }, [amount, recipient, reason, coin, currency]);
+  }, [amount, recipient, reason, coin, currency, recipientName]);
 
   useEffect(() => {
     if (phase === 'idle') void prepare();
@@ -254,20 +270,37 @@ export default function HspPayActionCard({ amount, recipient, reason, coin, curr
     <div className="mt-2 rounded-2xl border border-primary/20 bg-card/80 shadow-[0_20px_60px_-36px_rgba(99,102,241,0.35)] overflow-hidden">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-            <Sparkles className="w-3 h-3" />
-            HSP \u00d7 SafeFlow Demo
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Merchant avatar */}
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500/15 to-purple-500/15 border border-primary/20 flex items-center justify-center text-lg">
+            {recipientEmoji ?? '\ud83d\udcb3'}
           </div>
-          <div className="text-sm font-semibold text-foreground mt-0.5">
-            Pay <span className="font-data">{amount} {coin ?? 'HSK'}</span> \u2192{' '}
-            <span className="font-data">{shortenAddress(recipient)}</span>
-          </div>
-          {reason && (
-            <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
-              Memo: <span className="italic">{reason}</span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+              <Sparkles className="w-3 h-3" />
+              HSP \u00d7 SafeFlow payment
             </div>
-          )}
+            <div className="text-sm font-semibold text-foreground mt-0.5 truncate">
+              Pay <span className="font-data">{amount} {coin ?? 'HSK'}</span> to{' '}
+              {recipientName ? (
+                <span className="text-foreground">{recipientName}</span>
+              ) : (
+                <span className="font-data text-foreground">{shortenAddress(recipient)}</span>
+              )}
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+              {recipientTagline ? <span>{recipientTagline} \u00b7 </span> : null}
+              {recipientName && (
+                <span className="font-data">{shortenAddress(recipient)}</span>
+              )}
+              {!recipientName && <span>Unlisted address</span>}
+            </div>
+            {reason && (
+              <div className="text-[11px] text-muted-foreground mt-0.5 truncate italic">
+                \u201c{reason}\u201d
+              </div>
+            )}
+          </div>
         </div>
         <StatusPill phase={phase} isConfirming={isConfirming} />
       </div>

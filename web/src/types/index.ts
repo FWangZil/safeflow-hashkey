@@ -132,6 +132,12 @@ export interface ChatMessage {
 export interface HspPayActionData {
   amount: string;      // human-readable amount, e.g. "0.05"
   recipient: `0x${string}`;
+  /** Human-friendly payee label, e.g. "Alice's Coffee Bar". */
+  recipientName?: string;
+  /** Short secondary label shown under the name, e.g. "Neighborhood coffee shop". */
+  recipientTagline?: string;
+  /** Emoji used as the payee avatar in the chat card. */
+  recipientEmoji?: string;
   reason?: string;
   coin?: string;       // defaults to HSK
   currency?: string;   // display currency, defaults to USD

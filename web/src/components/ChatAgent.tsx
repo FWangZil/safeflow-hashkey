@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAccount, useChainId } from 'wagmi';
-import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield, RotateCcw, CreditCard } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, ArrowRight, Zap, TrendingUp, Shield, RotateCcw } from 'lucide-react';
 import { isHashKeyChain } from '@/lib/mode';
+import { DEMO_MERCHANTS } from '@/lib/demo-merchants';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage, EarnVault, RecallActionData } from '@/types';
@@ -39,11 +40,13 @@ export default function ChatAgent({ onSelectVault, onOpenSettings, initialMessag
 
   const QUICK_PROMPTS = useMemo(() => {
     if (onHashKey) {
-      return [
-        { icon: <CreditCard className="w-4 h-4" />, text: 'Pay 0.01 HSK to 0x000000000000000000000000000000000000dEaD for coffee' },
-        { icon: <Shield className="w-4 h-4" />, text: 'Pay 0.05 HSK to 0x000000000000000000000000000000000000dEaD for the HSP demo' },
-        { icon: <Zap className="w-4 h-4" />, text: 'Send 0.1 HSK to 0x000000000000000000000000000000000000dEaD as a merchant settlement' },
-      ];
+      // Use friendly named demo merchants instead of raw hex addresses.
+      // The chat parser resolves these names back to fundable Anvil
+      // accounts via `src/lib/demo-merchants.ts`.
+      return DEMO_MERCHANTS.slice(0, 3).map(m => ({
+        icon: <span className="text-base leading-none">{m.emoji}</span>,
+        text: `Pay ${m.name} ${m.suggestedAmount} HSK for ${m.suggestedReason}`,
+      }));
     }
     return [
       { icon: <TrendingUp className="w-4 h-4" />, text: t('chat.quickPrompts.stablecoin') },
